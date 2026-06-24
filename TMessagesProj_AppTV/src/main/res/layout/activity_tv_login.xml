@@ -20,7 +20,7 @@
             android:id="@+id/tv_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/tv_login_title"
+            android:text="@string/AuthAnotherClient"
             android:textColor="#FFFFFF"
             android:textSize="36sp"
             android:textStyle="bold"
@@ -30,7 +30,7 @@
             android:id="@+id/status_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/tv_login_loading"
+            android:text="@string/Loading"
             android:textColor="#99AABB"
             android:textSize="18sp"
             android:lineSpacingMultiplier="1.4" />
@@ -46,23 +46,40 @@
 
     </LinearLayout>
 
-    <!-- Right panel: QR code -->
-    <FrameLayout
+    <!-- Right panel: QR code + refresh button -->
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="1"
+        android:orientation="vertical"
         android:gravity="center">
 
         <ImageView
             android:id="@+id/qr_image"
             android:layout_width="280dp"
             android:layout_height="280dp"
-            android:layout_gravity="center"
             android:background="#FFFFFF"
             android:padding="12dp"
             android:scaleType="fitXY"
             android:visibility="invisible" />
 
-    </FrameLayout>
+        <Button
+            android:id="@+id/refresh_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/Refresh"
+            android:textSize="16sp"
+            android:paddingStart="32dp"
+            android:paddingEnd="32dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:background="@drawable/tv_link_button_bg"
+            android:textColor="#FFFFFF"
+            android:visibility="gone" />
+
+    </LinearLayout>
 
 </LinearLayout>

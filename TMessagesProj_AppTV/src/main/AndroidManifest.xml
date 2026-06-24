@@ -32,6 +32,12 @@
             android:exported="false"
             android:theme="@style/TvTheme" />
 
+        <activity
+            android:name="org.telegram.tv.TvMainActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:theme="@style/TvTheme" />
+
     </application>
 
 </manifest>

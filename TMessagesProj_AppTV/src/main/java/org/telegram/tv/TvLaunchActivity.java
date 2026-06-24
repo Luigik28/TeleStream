@@ -13,7 +13,7 @@ public class TvLaunchActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         if (UserConfig.getInstance(UserConfig.selectedAccount).isClientActivated()) {
-            // TODO: launch TvMainActivity once implemented
+            startActivity(new Intent(this, TvMainActivity.class));
             finish();
         } else {
             startActivity(new Intent(this, TvLoginActivity.class));
