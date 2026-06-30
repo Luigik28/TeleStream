@@ -136,6 +136,15 @@ public class TvMainActivity extends Activity implements NotificationCenter.Notif
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Re-subscribe in case it was removed during streaming (startLivePlayer removes it).
+        // Use remove+add to avoid double-registration.
+        NotificationCenter.getInstance(account).removeObserver(this, NotificationCenter.didReceiveNewMessages);
+        NotificationCenter.getInstance(account).addObserver(this, NotificationCenter.didReceiveNewMessages);
+    }
+
+    @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (playerContainer.getVisibility() == View.VISIBLE) {
@@ -478,7 +487,7 @@ public class TvMainActivity extends Activity implements NotificationCenter.Notif
             pos += lines[i].length() + 1;
         }
 
-        Pattern timePattern = Pattern.compile("\\(\\d{2}/\\d{2}\\)\\s+(\\d{2}:\\d{2})");
+        Pattern timePattern = Pattern.compile("\\((\\d{2}/\\d{2})\\)\\s+(\\d{2}:\\d{2})");
 
         for (TLRPC.MessageEntity entity : entities) {
             if (!(entity instanceof TLRPC.TL_messageEntityTextUrl)) continue;
@@ -513,7 +522,7 @@ public class TvMainActivity extends Activity implements NotificationCenter.Notif
                 String line = lines[i].trim();
                 if (line.isEmpty()) break;
                 Matcher m = timePattern.matcher(line);
-                if (m.find()) { time = m.group(1); break; }
+                if (m.find()) { time = m.group(1) + " " + m.group(2); break; }
                 // Stop if another URL entity starts on this line
                 boolean hasUrl = false;
                 for (TLRPC.MessageEntity ent : entities) {
@@ -758,6 +767,9 @@ public class TvMainActivity extends Activity implements NotificationCenter.Notif
         // of Telegram's proprietary segment format.
         livePlayer = new LivePlayer(this, account, null, dialogId, 0, true, callRef);
 
+        // TextureViewRenderer (isSurfaceView=false): SurfaceViewRenderer crashes on TV because
+        // LivePlayerView.onFirstFrameRendered() calls .animate().start() from the GL thread
+        // (no Looper) — AndroidRuntimeException: Animators may only be run on Looper threads.
         livePlayerView = new LivePlayerView(this, account, false);
         streamPlayerContainer.addView(livePlayerView,
             new FrameLayout.LayoutParams(
@@ -765,6 +777,17 @@ public class TvMainActivity extends Activity implements NotificationCenter.Notif
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT));
 
         livePlayer.setDisplaySink(livePlayerView.getSink());
+
+        // Stop receiving channel notification floods while streaming — the continuous
+        // didReceiveNewMessages updates (group call participant events from all joined
+        // channels) saturate the main thread and cause video frame drops + A/V jitter.
+        NotificationCenter.getInstance(account).removeObserver(this, NotificationCenter.didReceiveNewMessages);
+
+        // Hint the display to prefer a refresh rate matching the stream frame rate.
+        // Reduces judder from frame rate mismatch on TV panels (e.g. 25fps stream on 60Hz).
+        android.view.WindowManager.LayoutParams lp = getWindow().getAttributes();
+        lp.preferredRefreshRate = 25f;
+        getWindow().setAttributes(lp);
 
         android.util.Log.d("TvMain", "LivePlayer started for call=" + callRef.id + " dialogId=" + dialogId);
 
@@ -797,6 +820,8 @@ public class TvMainActivity extends Activity implements NotificationCenter.Notif
             streamPlayerContainer.removeView(livePlayerView);
             livePlayerView = null;
         }
+        // Re-subscribe so the events table can receive bot messages again
+        NotificationCenter.getInstance(account).addObserver(this, NotificationCenter.didReceiveNewMessages);
         playerContainer.setVisibility(View.GONE);
         streamLoading.setVisibility(View.GONE);
         streamTopBar.setVisibility(View.VISIBLE); // restore for next stream

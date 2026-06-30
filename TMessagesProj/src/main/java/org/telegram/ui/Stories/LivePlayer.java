@@ -315,7 +315,16 @@ public class LivePlayer implements NotificationCenter.NotificationCenterDelegate
                                                 }
                                                 final TL_phone.groupCallStreamChannels res3 = (TL_phone.groupCallStreamChannels) response;
                                                 if (!res3.channels.isEmpty()) {
-                                                    currentTime = res3.channels.get(0).last_timestamp_ms;
+                                                    // Use the minimum timestamp across all standard-scale channels
+                                                    // (scale=0 → 1s segments). The first channel isn't always audio
+                                                    // or video — ordering is server-determined. Using the minimum
+                                                    // guarantees both audio and video have data at that timestamp,
+                                                    // preventing A/V desync when one track is ahead of the other.
+                                                    for (TL_phone.TL_groupCallStreamChannel ch : res3.channels) {
+                                                        if (ch.scale >= 0 && (currentTime == 0 || ch.last_timestamp_ms < currentTime)) {
+                                                            currentTime = ch.last_timestamp_ms;
+                                                        }
+                                                    }
                                                 }
                                                 if (res3.channels.isEmpty()) {
                                                     AndroidUtilities.runOnUIThread(() -> {
@@ -529,7 +538,14 @@ public class LivePlayer implements NotificationCenter.NotificationCenterDelegate
                                 }
                                 final TL_phone.groupCallStreamChannels res = (TL_phone.groupCallStreamChannels) response;
                                 if (!res.channels.isEmpty()) {
-                                    currentTime = res.channels.get(0).last_timestamp_ms;
+                                    // Use the minimum timestamp among standard-scale (>=0) channels
+                                    // so the native library starts from a point where both audio
+                                    // and video tracks have data available, preventing A/V desync.
+                                    for (TL_phone.TL_groupCallStreamChannel ch : res.channels) {
+                                        if (ch.scale >= 0 && (currentTime == 0 || ch.last_timestamp_ms < currentTime)) {
+                                            currentTime = ch.last_timestamp_ms;
+                                        }
+                                    }
                                 }
                                 if (res.channels.isEmpty()) {
                                     AndroidUtilities.runOnUIThread(() -> {
