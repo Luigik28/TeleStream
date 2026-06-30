@@ -2,12 +2,12 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#1C2733">
+    android:background="#0D1117">
 
     <!-- Loading / status state -->
     <LinearLayout
         android:id="@+id/loading_container"
-        android:layout_width="wrap_content"
+        android:layout_width="500dp"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:orientation="vertical"
@@ -23,48 +23,170 @@
             android:id="@+id/status_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="24dp"
             android:textColor="#99AABB"
-            android:textSize="20sp"
-            android:gravity="center" />
+            android:textSize="22sp"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.4" />
 
     </LinearLayout>
 
-    <!-- Message state -->
-    <ScrollView
-        android:id="@+id/scroll_view"
+    <!-- Events table (initially hidden) -->
+    <LinearLayout
+        android:id="@+id/events_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:orientation="vertical"
         android:visibility="gone"
         android:paddingStart="80dp"
         android:paddingEnd="80dp"
-        android:paddingTop="60dp"
-        android:paddingBottom="60dp"
+        android:paddingTop="48dp"
+        android:paddingBottom="48dp"
         android:clipToPadding="false">
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/events_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:textColor="#FFFFFF"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp" />
 
-            <!-- Message body text -->
+        <!-- Header row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:orientation="horizontal"
+            android:background="#1A2A3A"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
             <TextView
-                android:id="@+id/message_text"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="#E0E0E0"
-                android:textSize="22sp"
-                android:lineSpacingMultiplier="1.5"
-                android:layout_marginBottom="40dp" />
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="3"
+                android:text="SPORT"
+                android:textColor="#4FC3F7"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:gravity="center_vertical" />
 
-            <!-- Links list (focusable, D-PAD navigable) -->
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="5"
+                android:text="EVENTO"
+                android:textColor="#4FC3F7"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:gravity="center_vertical" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="2"
+                android:text="ORE"
+                android:textColor="#4FC3F7"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:gravity="center_vertical|end" />
+
+        </LinearLayout>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#1E3A4A" />
+
+        <!-- Scrollable events list -->
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:scrollbars="none">
+
             <LinearLayout
-                android:id="@+id/links_container"
+                android:id="@+id/events_list"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical" />
 
+        </ScrollView>
+
+    </LinearLayout>
+
+    <!-- Streaming player (initially hidden) -->
+    <FrameLayout
+        android:id="@+id/player_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:background="#000000">
+
+        <FrameLayout
+            android:id="@+id/stream_player_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Top overlay with event title and back hint -->
+        <LinearLayout
+            android:id="@+id/stream_top_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="#AA000000"
+            android:paddingStart="40dp"
+            android:paddingEnd="40dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/stream_event_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#FFFFFF"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="[BACK] Torna agli eventi"
+                android:textColor="#99FFFFFF"
+                android:textSize="16sp" />
+
         </LinearLayout>
-    </ScrollView>
+
+        <!-- Loading overlay for stream -->
+        <LinearLayout
+            android:id="@+id/stream_loading"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminateTint="#4FC3F7" />
+
+            <TextView
+                android:id="@+id/stream_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:textColor="#99AABB"
+                android:textSize="18sp"
+                android:gravity="center" />
+
+        </LinearLayout>
+
+    </FrameLayout>
 
 </FrameLayout>

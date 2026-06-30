@@ -279,13 +279,15 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
         TLRPC.TL_auth_authorization auth = (TLRPC.TL_auth_authorization) success.authorization;
         Log.d(TAG, "onAuthSuccess: userId=" + auth.user.id + ", dcId=" + auth.user.id);
 
-        // Mirror LoginActivity.onAuthSuccess initialization sequence
-        MessagesController.getInstance(ACCOUNT).cleanup();
-        ConnectionsManager.getInstance(ACCOUNT).setUserId(auth.user.id);
-        UserConfig.getInstance(ACCOUNT).clearConfig();
-        MessagesController.getInstance(ACCOUNT).cleanup();
+        // Save user FIRST so the session survives process death.
+        // Do NOT call clearConfig() here — it wipes SharedPreferences synchronously
+        // and the async re-save via doOnIdle may never fire before the process ends.
         UserConfig.getInstance(ACCOUNT).setCurrentUser(auth.user);
         UserConfig.getInstance(ACCOUNT).saveConfig(true);
+
+        // Then reset runtime state for the new account
+        ConnectionsManager.getInstance(ACCOUNT).setUserId(auth.user.id);
+        MessagesController.getInstance(ACCOUNT).cleanup();
         MessagesStorage.getInstance(ACCOUNT).cleanup(true);
 
         ArrayList<TLRPC.User> users = new ArrayList<>();
