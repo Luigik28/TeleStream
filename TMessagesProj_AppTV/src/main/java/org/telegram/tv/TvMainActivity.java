@@ -114,6 +114,7 @@ public class TvMainActivity extends Activity implements NotificationCenter.Notif
     @Override
     protected void onPause() {
         super.onPause();
+        getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         // Stop stream when user presses HOME, switches app, or leaves in any way —
         // prevents audio playing in background.
         if (livePlayer != null) {
@@ -783,6 +784,9 @@ public class TvMainActivity extends Activity implements NotificationCenter.Notif
         // channels) saturate the main thread and cause video frame drops + A/V jitter.
         NotificationCenter.getInstance(account).removeObserver(this, NotificationCenter.didReceiveNewMessages);
 
+        // Keep screen on during streaming — prevents TV from going to standby.
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
         // Hint the display to prefer a refresh rate matching the stream frame rate.
         // Reduces judder from frame rate mismatch on TV panels (e.g. 25fps stream on 60Hz).
         android.view.WindowManager.LayoutParams lp = getWindow().getAttributes();
@@ -815,6 +819,7 @@ public class TvMainActivity extends Activity implements NotificationCenter.Notif
     }
 
     private void closePlayer() {
+        getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if (livePlayer != null) { livePlayer.destroy(); livePlayer = null; }
         if (livePlayerView != null && streamPlayerContainer != null) {
             streamPlayerContainer.removeView(livePlayerView);

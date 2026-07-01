@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">TeleStream TV</string>
+    <string name="app_name">TeleStream</string>
     <string name="tv_login_steps">1. Open Telegram on your phone\n2. Go to Settings → Devices\n3. Tap "Link Desktop Device"\n4. Point your camera at this QR code</string>
 </resources>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Blue circle background (Telegram style) -->
+    <path
+        android:fillColor="#2CA5E0"
+        android:pathData="M54,54m-54,0a54,54 0,1 1,108 0a54,54 0,1 1,-108 0" />
+
+    <!-- TV screen outer frame (rounded rectangle) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M22,30 Q22,26 26,26 L82,26 Q86,26 86,30 L86,68 Q86,72 82,72 L26,72 Q22,72 22,68 Z" />
+
+    <!-- TV screen inner (dark screen area) -->
+    <path
+        android:fillColor="#1A3A5C"
+        android:pathData="M26,30 L82,30 L82,68 L26,68 Z" />
+
+    <!-- TV stand/base left leg -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,72 L34,82 L40,82 L44,72 Z" />
+
+    <!-- TV stand/base right leg -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M64,72 L68,72 L74,82 L68,82 Z" />
+
+    <!-- TV base bar -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,80 L76,80 Q78,80 78,82 L78,84 Q78,86 76,86 L32,86 Q30,86 30,84 L30,82 Q30,80 32,80 Z" />
+
+    <!-- Paper plane inside the screen (Telegram identity) -->
+    <!-- Body of plane pointing right -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,49 L72,38 L58,60 L50,55 Z" />
+    <!-- Wing fold -->
+    <path
+        android:fillColor="#D0E8F8"
+        android:pathData="M50,55 L58,60 L55,67 Z" />
+
+</vector>

@@ -1,16 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Placeholder banner (320x180dp) — replace with a real PNG asset before publishing -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Dark background -->
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#1C2733" />
+            <solid android:color="#0D1B2A" />
         </shape>
     </item>
-    <item android:gravity="center">
+
+    <!-- Blue circle left -->
+    <item
+        android:left="32dp"
+        android:top="20dp"
+        android:right="224dp"
+        android:bottom="20dp">
+        <shape android:shape="oval">
+            <solid android:color="#2CA5E0" />
+        </shape>
+    </item>
+
+    <!-- Accent bar top-right -->
+    <item
+        android:left="168dp"
+        android:top="56dp"
+        android:right="32dp"
+        android:bottom="112dp">
         <shape android:shape="rectangle">
-            <solid android:color="#2BAEE5" />
-            <size android:width="80dp" android:height="80dp" />
-            <corners android:radius="40dp" />
+            <solid android:color="#1A4A6A" />
+            <corners android:radius="3dp" />
         </shape>
     </item>
+
+    <!-- Accent bar middle-right (blue) -->
+    <item
+        android:left="168dp"
+        android:top="76dp"
+        android:right="32dp"
+        android:bottom="92dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#2CA5E0" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+
+    <!-- Accent bar bottom-right -->
+    <item
+        android:left="168dp"
+        android:top="96dp"
+        android:right="56dp"
+        android:bottom="72dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#1A4A6A" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+
 </layer-list>
