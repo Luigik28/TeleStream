@@ -68,42 +68,33 @@
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:visibility="gone"
-        android:paddingStart="80dp"
-        android:paddingEnd="80dp"
-        android:paddingTop="48dp"
-        android:paddingBottom="48dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="24dp"
         android:clipToPadding="false">
 
-        <TextView
-            android:id="@+id/events_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:textSize="26sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="24dp" />
-
-        <!-- Thin accent line below title -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="2dp"
-            android:background="#2CA5E0"
-            android:layout_marginBottom="8dp" />
-
-        <!-- Scrollable events list -->
-        <ScrollView
+        <!-- Scrollable events list — SmoothFocusScrollView forces smooth D-PAD scroll -->
+        <org.telegram.tv.ui.SmoothFocusScrollView
+            android:id="@+id/events_scroll"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:scrollbars="none">
 
-            <LinearLayout
-                android:id="@+id/events_list"
+            <!-- FrameLayout lets the animated focus cursor overlay the list -->
+            <FrameLayout
+                android:id="@+id/events_list_frame"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:layout_height="wrap_content">
 
-        </ScrollView>
+                <LinearLayout
+                    android:id="@+id/events_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+            </FrameLayout>
+
+        </org.telegram.tv.ui.SmoothFocusScrollView>
 
     </LinearLayout>
 

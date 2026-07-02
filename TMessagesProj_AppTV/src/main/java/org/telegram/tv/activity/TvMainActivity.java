@@ -1,6 +1,8 @@
 package org.telegram.tv.activity;
 
 import android.app.Activity;
+import android.media.AudioAttributes;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -8,6 +10,8 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.graphics.Color;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -57,8 +61,9 @@ public class TvMainActivity extends Activity
 
     // UI — events table
     private View eventsContainer;
-    private TextView eventsTitle;
     private LinearLayout eventsList;
+    private FrameLayout eventsListFrame;
+    private View focusCursor;
 
     // UI — streaming player
     private View playerContainer;
@@ -85,8 +90,8 @@ public class TvMainActivity extends Activity
         instructionText       = findViewById(R.id.instruction_text);
         retryButton           = findViewById(R.id.retry_button);
         eventsContainer       = findViewById(R.id.events_container);
-        eventsTitle           = findViewById(R.id.events_title);
         eventsList            = findViewById(R.id.events_list);
+        eventsListFrame       = findViewById(R.id.events_list_frame);
         playerContainer       = findViewById(R.id.player_container);
         streamLoading         = findViewById(R.id.stream_loading);
         streamTopBar          = findViewById(R.id.stream_top_bar);
@@ -135,7 +140,10 @@ public class TvMainActivity extends Activity
             streamLoading.setVisibility(View.GONE);
             streamTopBar.setVisibility(View.VISIBLE);
             eventsContainer.setVisibility(View.VISIBLE);
-            if (eventsList.getChildCount() > 0) eventsList.getChildAt(0).requestFocus();
+            for (int i = 0; i < eventsList.getChildCount(); i++) {
+                View child = eventsList.getChildAt(i);
+                if (child.isFocusable()) { child.requestFocus(); break; }
+            }
         }
     }
 
@@ -296,24 +304,25 @@ public class TvMainActivity extends Activity
 
     private void showEventsTable(MessageObject msg, List<StreamEvent> events) {
         clearWaitingState();
-
-        String title = "📌 EVENTI IN PROGRAMMA";
-        if (msg.messageOwner.message != null) {
-            for (String line : msg.messageOwner.message.split("\n")) {
-                if (!line.trim().isEmpty()) { title = line.trim(); break; }
-            }
-        }
-        eventsTitle.setText(title);
-
         eventsList.removeAllViews();
+        resetFocusCursor();
+
+        int catIdx = -1;
         String prevCategory = "";
+        List<View> animTargets = new ArrayList<>();
+
         for (StreamEvent event : events) {
-            // Category section header — shown once per category group
             if (!event.category.equals(prevCategory)) {
-                eventsList.addView(createCategoryHeader(event.category));
+                catIdx++;
+                View header = createCategoryHeader(event.category);
+                eventsList.addView(header);
+                animTargets.add(header);
                 prevCategory = event.category;
             }
-            eventsList.addView(createEventRow(event));
+            View row = createEventRow(event, catIdx);
+            eventsList.addView(row);
+            animTargets.add(row);
+
             View div = new View(this);
             div.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 1));
@@ -321,50 +330,89 @@ public class TvMainActivity extends Activity
             eventsList.addView(div);
         }
 
+        // Staggered fade + slide-up entry
+        int delay = 0;
+        for (View v : animTargets) {
+            v.setAlpha(0f);
+            v.setTranslationY(dp(14));
+            v.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(220)
+                    .setStartDelay(delay)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+            delay += 28;
+        }
+
         loadingContainer.setVisibility(View.GONE);
         eventsContainer.setVisibility(View.VISIBLE);
-        if (eventsList.getChildCount() > 0) eventsList.getChildAt(0).requestFocus();
+        for (int i = 0; i < eventsList.getChildCount(); i++) {
+            View child = eventsList.getChildAt(i);
+            if (child.isFocusable()) { child.requestFocus(); break; }
+        }
     }
 
-    /** Full-width section label shown above each group of events with the same category. */
+    /** Full-width section header: solid left strip + gradient band fading to transparent. */
     private View createCategoryHeader(String category) {
-        TextView tv = new TextView(this);
-        tv.setLayoutParams(new LinearLayout.LayoutParams(
+        int base = categoryColor(category);
+        int r = (base >> 16) & 0xFF, g = (base >> 8) & 0xFF, b = base & 0xFF;
+
+        LinearLayout container = new LinearLayout(this);
+        container.setLayoutParams(new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        container.setOrientation(LinearLayout.HORIZONTAL);
+
+        View strip = new View(this);
+        strip.setBackgroundColor(base);
+        container.addView(strip, new LinearLayout.LayoutParams(dp(5), LinearLayout.LayoutParams.MATCH_PARENT));
+
+        TextView tv = new TextView(this);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         tv.setText(category.toUpperCase());
-        tv.setTextColor(categoryColor(category));
+        tv.setTextColor(base);
         tv.setTextSize(13f);
         tv.setTypeface(null, android.graphics.Typeface.BOLD);
-        tv.setPadding(dp(20), dp(18), dp(20), dp(6));
-        return tv;
+        tv.setPadding(dp(16), dp(16), dp(20), dp(8));
+        tv.setBackground(new android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{Color.argb(70, r, g, b), Color.argb(0, r, g, b)}));
+        container.addView(tv);
+
+        return container;
     }
 
-    private View createEventRow(StreamEvent event) {
+    private View createEventRow(StreamEvent event, int categoryIndex) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setFocusable(true);
         row.setClickable(true);
         row.setFocusableInTouchMode(false);
-        row.setPadding(dp(20), dp(16), dp(20), dp(16));
         row.setGravity(Gravity.CENTER_VERTICAL);
 
+        // Zebra: alternate a barely-visible white tint between category groups
+        if (categoryIndex % 2 == 1) row.setBackgroundColor(0x0AFFFFFF);
+
         row.setOnFocusChangeListener((v, hasFocus) -> {
-            if (hasFocus) {
-                android.graphics.drawable.GradientDrawable hl = new android.graphics.drawable.GradientDrawable();
-                hl.setColor(0xFF1A3A5F);
-                hl.setCornerRadius(dp(10));
-                hl.setStroke(dp(2), 0xFF2CA5E0);
-                v.setBackground(hl);
-            } else {
-                v.setBackground(null);
-            }
+            if (hasFocus) moveFocusCursorTo(v);
         });
         row.setOnClickListener(v -> openEventStream(event));
 
-        // Left: match content (teams or plain name) — takes all remaining space
+        // Left category-color strip (flush with screen edge)
+        View strip = new View(this);
+        strip.setBackgroundColor(categoryColor(event.category));
+        row.addView(strip, new LinearLayout.LayoutParams(dp(5), LinearLayout.LayoutParams.MATCH_PARENT));
+
+        // Inner content (takes all remaining width, carries top/bottom/end padding)
+        LinearLayout inner = new LinearLayout(this);
+        inner.setOrientation(LinearLayout.HORIZONTAL);
+        inner.setGravity(Gravity.CENTER_VERTICAL);
+        inner.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        inner.setPadding(dp(16), dp(14), dp(20), dp(14));
+
         String[] teams = MessageParser.parseTeams(event.eventName);
         if (teams != null) {
-            row.addView(createFootballContent(teams));
+            inner.addView(createFootballContent(teams));
         } else {
             TextView nameView = new TextView(this);
             nameView.setLayoutParams(new LinearLayout.LayoutParams(0,
@@ -375,10 +423,10 @@ public class TvMainActivity extends Activity
             nameView.setMaxLines(1);
             nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
             nameView.setGravity(Gravity.CENTER_VERTICAL);
-            row.addView(nameView);
+            inner.addView(nameView);
         }
 
-        // Right: date/time — fixed width, always visible
+        // Time badge — pill with subtle blue border
         TextView timeView = new TextView(this);
         LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -388,9 +436,16 @@ public class TvMainActivity extends Activity
         timeView.setTextColor(0xFF4FC3F7);
         timeView.setTextSize(18f);
         timeView.setTypeface(null, android.graphics.Typeface.BOLD);
-        timeView.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
-        row.addView(timeView);
+        timeView.setGravity(Gravity.CENTER_VERTICAL);
+        timeView.setPadding(dp(12), dp(5), dp(12), dp(5));
+        android.graphics.drawable.GradientDrawable badge = new android.graphics.drawable.GradientDrawable();
+        badge.setColor(0x221A2A40);
+        badge.setCornerRadius(dp(6));
+        badge.setStroke(dp(1), 0x334FC3F7);
+        timeView.setBackground(badge);
+        inner.addView(timeView);
 
+        row.addView(inner);
         return row;
     }
 
@@ -566,6 +621,17 @@ public class TvMainActivity extends Activity
 
         livePlayer = new LivePlayer(this, account, null, dialogId, 0, true, callRef);
 
+        // LivePlayer.configureAudio() sets USAGE_MEDIA (static) for RTMP streams, but the
+        // AudioTrack is created later, async, when the joinGroupCall response arrives.
+        // On TV the HDMI audio path adds latency that Android doesn't report, causing video
+        // to appear ahead. USAGE_VOICE_COMMUNICATION bypasses Android's audio effects chain
+        // (equaliser, bass-boost), reducing the Android-side latency before the AudioTrack
+        // is created. This runs on the main thread so it wins the race against any posted callback.
+        if (Build.VERSION.SDK_INT >= 21) {
+            org.webrtc.voiceengine.WebRtcAudioTrack.setAudioTrackUsageAttribute(
+                    AudioAttributes.USAGE_VOICE_COMMUNICATION);
+        }
+
         // TextureViewRenderer (isSurfaceView=false): SurfaceViewRenderer crashes on TV because
         // LivePlayerView.onFirstFrameRendered() calls .animate().start() from the GL thread.
         livePlayerView = new LivePlayerView(this, account, false);
@@ -611,7 +677,10 @@ public class TvMainActivity extends Activity
         streamLoading.setVisibility(View.GONE);
         streamTopBar.setVisibility(View.VISIBLE);
         eventsContainer.setVisibility(View.VISIBLE);
-        if (eventsList.getChildCount() > 0) eventsList.getChildAt(0).requestFocus();
+        for (int i = 0; i < eventsList.getChildCount(); i++) {
+            View child = eventsList.getChildAt(i);
+            if (child.isFocusable()) { child.requestFocus(); break; }
+        }
     }
 
     private void destroyPlayer() {
@@ -620,6 +689,65 @@ public class TvMainActivity extends Activity
             streamPlayerContainer.removeView(livePlayerView);
             livePlayerView = null;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Focus cursor — animated highlight that slides between event rows
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void ensureFocusCursor() {
+        if (focusCursor != null) return;
+        android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+        gd.setColor(0x1A2CA5E0);
+        gd.setCornerRadius(dp(10));
+        gd.setStroke(dp(2), 0xFF2CA5E0);
+
+        focusCursor = new View(this);
+        focusCursor.setBackground(gd);
+        focusCursor.setClickable(false);
+        focusCursor.setFocusable(false);
+        focusCursor.setAlpha(0f);
+
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, dp(60));
+        eventsListFrame.addView(focusCursor, lp);
+    }
+
+    private void resetFocusCursor() {
+        if (focusCursor == null) return;
+        focusCursor.animate().cancel();
+        focusCursor.setAlpha(0f);
+        focusCursor.setY(0f);
+    }
+
+    private void moveFocusCursorTo(View row) {
+        ensureFocusCursor();
+        // Wait for layout so getTop()/getHeight() are valid.
+        row.post(() -> {
+            if (focusCursor == null) return;
+            int rowH = row.getHeight();
+            int rowY = row.getTop(); // relative to events_list, which is at y=0 in eventsListFrame
+
+            // Update cursor height without animation (it snaps, then slides).
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) focusCursor.getLayoutParams();
+            lp.height = rowH;
+            focusCursor.setLayoutParams(lp);
+
+            boolean firstFocus = focusCursor.getAlpha() == 0f;
+            if (firstFocus) {
+                focusCursor.setY(rowY);
+                focusCursor.animate()
+                        .alpha(1f)
+                        .setDuration(120)
+                        .start();
+            } else {
+                focusCursor.animate()
+                        .y(rowY)
+                        .setDuration(180)
+                        .setInterpolator(new DecelerateInterpolator())
+                        .start();
+            }
+        });
     }
 
     // ─────────────────────────────────────────────────────────────────────────
