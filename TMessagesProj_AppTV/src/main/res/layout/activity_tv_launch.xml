@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0D1B2A">
+
+    <!-- TeleStream TV icon: fades in after the plane arrives -->
+    <ImageView
+        android:id="@+id/splash_tv"
+        android:layout_width="160dp"
+        android:layout_height="160dp"
+        android:layout_gravity="center"
+        android:src="@drawable/ic_telestream"
+        android:scaleType="fitCenter"
+        android:alpha="0" />
+
+    <!-- Paper plane: starts off-screen left, flies to center in code -->
+    <ImageView
+        android:id="@+id/splash_plane"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_gravity="center"
+        android:src="@drawable/ic_plane"
+        android:scaleType="fitCenter" />
+
+    <!-- App name: fades in at the bottom -->
+    <TextView
+        android:id="@+id/splash_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|bottom"
+        android:layout_marginBottom="100dp"
+        android:text="TeleStream"
+        android:textColor="#FFFFFF"
+        android:textSize="40sp"
+        android:fontFamily="sans-serif-light"
+        android:letterSpacing="0.08"
+        android:alpha="0" />
+
+</FrameLayout>

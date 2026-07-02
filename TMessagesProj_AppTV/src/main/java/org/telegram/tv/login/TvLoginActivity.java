@@ -28,7 +28,7 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.tv.R;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
-import org.telegram.tv.TvMainActivity;
+import org.telegram.tv.activity.TvMainActivity;
 
 import java.util.ArrayList;
 import java.util.HashMap;

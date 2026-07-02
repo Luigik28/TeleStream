@@ -29,6 +29,36 @@
             android:gravity="center"
             android:lineSpacingMultiplier="1.4" />
 
+        <!-- Shown during "waiting for phone" state -->
+        <TextView
+            android:id="@+id/instruction_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:textColor="#FFFFFF"
+            android:textSize="26sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.3"
+            android:visibility="gone" />
+
+        <!-- Shown after waiting timeout -->
+        <TextView
+            android:id="@+id/retry_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:paddingStart="32dp"
+            android:paddingEnd="32dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text="Riprova"
+            android:textColor="#4FC3F7"
+            android:textSize="22sp"
+            android:focusable="true"
+            android:clickable="true"
+            android:visibility="gone" />
+
     </LinearLayout>
 
     <!-- Events table (initially hidden) -->
@@ -53,52 +83,12 @@
             android:textStyle="bold"
             android:layout_marginBottom="24dp" />
 
-        <!-- Header row -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:orientation="horizontal"
-            android:background="#1A2A3A"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="3"
-                android:text="SPORT"
-                android:textColor="#4FC3F7"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:gravity="center_vertical" />
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="5"
-                android:text="EVENTO"
-                android:textColor="#4FC3F7"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:gravity="center_vertical" />
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="2"
-                android:text="DATA/ORA"
-                android:textColor="#4FC3F7"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:gravity="center_vertical|end" />
-
-        </LinearLayout>
-
-        <!-- Divider -->
+        <!-- Thin accent line below title -->
         <View
             android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#1E3A4A" />
+            android:layout_height="2dp"
+            android:background="#2CA5E0"
+            android:layout_marginBottom="8dp" />
 
         <!-- Scrollable events list -->
         <ScrollView

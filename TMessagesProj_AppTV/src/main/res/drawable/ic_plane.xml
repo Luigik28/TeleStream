@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="80dp"
+    android:height="80dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Telegram-style blue circle -->
+    <path
+        android:fillColor="#2CA5E0"
+        android:pathData="M54,54m-54,0a54,54 0,1 1,108 0a54,54 0,1 1,-108 0" />
+
+    <!-- Paper plane body (pointing right) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,54 L80,34 L62,72 L50,63 Z" />
+
+    <!-- Wing fold -->
+    <path
+        android:fillColor="#D0E8F8"
+        android:pathData="M50,63 L62,72 L58,80 Z" />
+
+</vector>
