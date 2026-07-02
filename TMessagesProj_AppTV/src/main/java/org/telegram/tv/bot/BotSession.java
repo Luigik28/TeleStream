@@ -42,6 +42,8 @@ public final class BotSession {
 
     private long dialogId = 0;
     private boolean startSent = false;
+    private TLRPC.InputPeer botPeer = null;
+    private int lastSeenMessageId = 0;
 
     public BotSession(int account, String botUsername, Listener listener) {
         this.account     = account;
@@ -57,8 +59,10 @@ public final class BotSession {
     }
 
     public void restart() {
-        startSent = false;
-        dialogId  = 0;
+        startSent         = false;
+        dialogId          = 0;
+        botPeer           = null;
+        lastSeenMessageId = 0;
         listener.onStatus("Connessione…");
         resolveBot();
     }
@@ -75,6 +79,8 @@ public final class BotSession {
      * @return true if the message was recognized and acted on (stop processing the batch).
      */
     public boolean handleMessage(MessageObject msg) {
+        // Track the highest processed message ID so polling skips already-handled messages.
+        lastSeenMessageId = Math.max(lastSeenMessageId, msg.messageOwner.id);
         if (msg.messageOwner.reply_markup instanceof TLRPC.TL_replyInlineMarkup) {
             TLRPC.TL_replyInlineMarkup markup = (TLRPC.TL_replyInlineMarkup) msg.messageOwner.reply_markup;
             for (TLRPC.TL_keyboardButtonRow row : markup.rows) {
@@ -131,6 +137,7 @@ public final class BotSession {
                     TLRPC.TL_inputPeerUser peer = new TLRPC.TL_inputPeerUser();
                     peer.user_id     = dialogId;
                     peer.access_hash = botUser != null ? botUser.access_hash : 0;
+                    botPeer = peer;
                     checkLastMessageAndProceed(peer);
                 }
             })
@@ -151,6 +158,7 @@ public final class BotSession {
                     ArrayList<TLRPC.Message> msgs = ((TLRPC.messages_Messages) response).messages;
                     if (!msgs.isEmpty()) lastMsg = msgs.get(0);
                 }
+                lastSeenMessageId = lastMsg != null ? lastMsg.id : 0;
 
                 if (lastMsg == null || !isToday(lastMsg.date)) {
                     android.util.Log.d(TAG, "no message today — sending /start");
@@ -308,6 +316,49 @@ public final class BotSession {
         TLRPC.TL_inputPeerChat p = new TLRPC.TL_inputPeerChat();
         p.chat_id = chat.id;
         return p;
+    }
+
+    /**
+     * Re-runs the same check as {@link #checkLastMessageAndProceed} (identical request params)
+     * without the sendStart fallback. Used as a periodic fallback while waiting for events, in
+     * case the push notification was missed or the MTProto connection wasn't ready when the bot
+     * replied.
+     */
+    public void pollForNewMessage() {
+        if (botPeer == null || dialogId == 0) return;
+
+        // Use identical parameters to checkLastMessageAndProceed so the request
+        // is treated the same way by both client and server.
+        TLRPC.TL_messages_getHistory req = new TLRPC.TL_messages_getHistory();
+        req.peer        = botPeer;
+        req.limit       = 1;
+        req.offset_id   = 0;
+        req.offset_date = 0;
+        req.add_offset  = 0;
+        req.max_id      = 0;
+        req.min_id      = 0;
+        req.hash        = 0;
+
+        ConnectionsManager.getInstance(account).sendRequest(req, (response, error) ->
+            AndroidUtilities.runOnUIThread(() -> {
+                if (!(response instanceof TLRPC.messages_Messages)) return;
+                ArrayList<TLRPC.Message> msgs = ((TLRPC.messages_Messages) response).messages;
+                if (msgs.isEmpty()) return;
+                TLRPC.Message raw = msgs.get(0);
+                android.util.Log.d(TAG, "poll: id=" + raw.id + " out=" + raw.out
+                    + " today=" + isToday(raw.date)
+                    + " entities=" + (raw.entities != null ? raw.entities.size() : "null"));
+                if (raw.out) return;
+                MessageObject msgObj = new MessageObject(account, raw, false, false);
+                if (MessageParser.isEventsMessage(msgObj)) {
+                    List<StreamEvent> events = MessageParser.parseEventsMessage(msgObj);
+                    if (!events.isEmpty()) {
+                        android.util.Log.d(TAG, "poll: found " + events.size() + " events → showing");
+                        listener.onEventsReady(msgObj, events);
+                    }
+                }
+            })
+        );
     }
 
     public static TLRPC.Chat extractChatFromUpdates(TLRPC.Updates updates) {

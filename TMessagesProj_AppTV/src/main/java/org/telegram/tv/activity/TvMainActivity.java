@@ -43,10 +43,11 @@ public class TvMainActivity extends Activity
     private BotSession session;
     private TeamLogoLoader logoLoader;
 
-    // Waiting-state animation
+    // Waiting-state animation + polling
     private boolean waitingForEvents = false;
     private Runnable dotsRunnable;
     private Runnable waitingTimeoutRunnable;
+    private Runnable pollRunnable;
 
     // UI — loading state
     private LinearLayout loadingContainer;
@@ -117,6 +118,7 @@ public class TvMainActivity extends Activity
         super.onDestroy();
         cancelDotsAnimation();
         cancelWaitingTimeout();
+        cancelPolling();
         logoLoader.shutdown();
         NotificationCenter.getInstance(account).removeObserver(
             this, NotificationCenter.didReceiveNewMessages);
@@ -142,6 +144,11 @@ public class TvMainActivity extends Activity
         super.onResume();
         NotificationCenter.getInstance(account).removeObserver(this, NotificationCenter.didReceiveNewMessages);
         NotificationCenter.getInstance(account).addObserver(this, NotificationCenter.didReceiveNewMessages);
+        // If the user went to their phone to open the mini app and came back, check immediately.
+        if (waitingForEvents) {
+            android.util.Log.d("TvMain", "onResume: still waiting — triggering immediate poll");
+            session.pollForNewMessage();
+        }
     }
 
     @Override
@@ -192,6 +199,7 @@ public class TvMainActivity extends Activity
         instructionText.setText("Apri la mini app\ndal tuo smartphone");
         startDotsAnimation("In attesa del calendario eventi");
         scheduleWaitingTimeout();
+        startPolling();
     }
 
     @Override
@@ -200,6 +208,8 @@ public class TvMainActivity extends Activity
         instructionText.setVisibility(View.VISIBLE);
         instructionText.setText("✅ Canali verificati.\nApri la mini app\ndal tuo smartphone per completare.");
         startDotsAnimation("In attesa del calendario eventi");
+        // Bot might have already replied with the events message while we were joining channels.
+        session.pollForNewMessage();
     }
 
     @Override
@@ -252,10 +262,30 @@ public class TvMainActivity extends Activity
         }
     }
 
+    private void startPolling() {
+        cancelPolling();
+        pollRunnable = new Runnable() {
+            @Override public void run() {
+                if (!waitingForEvents) return;
+                session.pollForNewMessage();
+                handler.postDelayed(this, 3000);
+            }
+        };
+        handler.postDelayed(pollRunnable, 2000); // first check after 2 s, then every 3 s
+    }
+
+    private void cancelPolling() {
+        if (pollRunnable != null) {
+            handler.removeCallbacks(pollRunnable);
+            pollRunnable = null;
+        }
+    }
+
     private void clearWaitingState() {
         waitingForEvents = false;
         cancelDotsAnimation();
         cancelWaitingTimeout();
+        cancelPolling();
         instructionText.setVisibility(View.GONE);
         retryButton.setVisibility(View.GONE);
     }
