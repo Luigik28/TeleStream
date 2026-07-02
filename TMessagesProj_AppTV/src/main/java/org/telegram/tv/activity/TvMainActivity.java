@@ -308,13 +308,17 @@ public class TvMainActivity extends Activity
         eventsList.removeAllViews();
         String prevCategory = "";
         for (StreamEvent event : events) {
-            eventsList.addView(createEventRow(event, prevCategory));
+            // Category section header — shown once per category group
+            if (!event.category.equals(prevCategory)) {
+                eventsList.addView(createCategoryHeader(event.category));
+                prevCategory = event.category;
+            }
+            eventsList.addView(createEventRow(event));
             View div = new View(this);
             div.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 1));
             div.setBackgroundColor(0xFF1E2A35);
             eventsList.addView(div);
-            prevCategory = event.category;
         }
 
         loadingContainer.setVisibility(View.GONE);
@@ -322,13 +326,26 @@ public class TvMainActivity extends Activity
         if (eventsList.getChildCount() > 0) eventsList.getChildAt(0).requestFocus();
     }
 
-    private View createEventRow(StreamEvent event, String prevCategory) {
+    /** Full-width section label shown above each group of events with the same category. */
+    private View createCategoryHeader(String category) {
+        TextView tv = new TextView(this);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        tv.setText(category.toUpperCase());
+        tv.setTextColor(categoryColor(category));
+        tv.setTextSize(13f);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
+        tv.setPadding(dp(20), dp(18), dp(20), dp(6));
+        return tv;
+    }
+
+    private View createEventRow(StreamEvent event) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setFocusable(true);
         row.setClickable(true);
         row.setFocusableInTouchMode(false);
-        row.setPadding(dp(16), dp(20), dp(20), dp(20));
+        row.setPadding(dp(20), dp(16), dp(20), dp(16));
         row.setGravity(Gravity.CENTER_VERTICAL);
 
         row.setOnFocusChangeListener((v, hasFocus) -> {
@@ -344,30 +361,8 @@ public class TvMainActivity extends Activity
         });
         row.setOnClickListener(v -> openEventStream(event));
 
-        // Category badge (weight=2, shown only on first row of that category)
-        LinearLayout catCol = new LinearLayout(this);
-        catCol.setLayoutParams(new LinearLayout.LayoutParams(0,
-            LinearLayout.LayoutParams.WRAP_CONTENT, 2f));
-        catCol.setGravity(Gravity.CENTER_VERTICAL);
-        if (!event.category.equals(prevCategory)) {
-            TextView badge = new TextView(this);
-            badge.setText(event.category.toUpperCase());
-            badge.setTextColor(0xFFFFFFFF);
-            badge.setTextSize(12f);
-            badge.setTypeface(null, android.graphics.Typeface.BOLD);
-            badge.setGravity(Gravity.CENTER);
-            badge.setPadding(dp(10), dp(5), dp(10), dp(5));
-            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-            bg.setColor(categoryColor(event.category));
-            bg.setCornerRadius(dp(14));
-            badge.setBackground(bg);
-            catCol.addView(badge);
-        }
-        row.addView(catCol);
-
-        // Content column (flexible)
-        String[] teams = isFootballCategory(event.category)
-            ? MessageParser.parseTeams(event.eventName) : null;
+        // Left: match content (teams or plain name) — takes all remaining space
+        String[] teams = MessageParser.parseTeams(event.eventName);
         if (teams != null) {
             row.addView(createFootballContent(teams));
         } else {
@@ -377,11 +372,13 @@ public class TvMainActivity extends Activity
             nameView.setText(event.eventName);
             nameView.setTextColor(0xFFE8EDF0);
             nameView.setTextSize(20f);
+            nameView.setMaxLines(1);
+            nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
             nameView.setGravity(Gravity.CENTER_VERTICAL);
             row.addView(nameView);
         }
 
-        // Time badge (right-aligned)
+        // Right: date/time — fixed width, always visible
         TextView timeView = new TextView(this);
         LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -397,6 +394,10 @@ public class TvMainActivity extends Activity
         return row;
     }
 
+    /**
+     * Horizontal layout: [logoA][nameA(weight=1)]  vs  [nameB(weight=1)][logoB]
+     * Each name gets equal space so neither overflows or wraps to multiple lines.
+     */
     private View createFootballContent(String[] teams) {
         LinearLayout container = new LinearLayout(this);
         container.setLayoutParams(new LinearLayout.LayoutParams(0,
@@ -405,13 +406,17 @@ public class TvMainActivity extends Activity
         container.setGravity(Gravity.CENTER_VERTICAL);
 
         ImageView logoA = makeLogoView();
-        TextView  nameA = makeTeamNameView(teams[0]);
-        TextView  vsView = new TextView(this);
+        TextView nameA = makeTeamNameView(teams[0]);  // weight=1, right side of left half
+        nameA.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+
+        TextView vsView = new TextView(this);
         vsView.setText("vs");
         vsView.setTextColor(0xFF5A7A99);
-        vsView.setTextSize(14f);
+        vsView.setTextSize(13f);
         vsView.setPadding(dp(10), 0, dp(10), 0);
-        TextView  nameB = makeTeamNameView(teams[1]);
+        vsView.setGravity(Gravity.CENTER);
+
+        TextView nameB = makeTeamNameView(teams[1]);  // weight=1, left side of right half
         ImageView logoB = makeLogoView();
 
         container.addView(logoA);
@@ -435,11 +440,16 @@ public class TvMainActivity extends Activity
 
     private TextView makeTeamNameView(String name) {
         TextView tv = new TextView(this);
+        // weight=1 so both team names split available space equally
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0,
+            LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         tv.setText(name);
         tv.setTextColor(0xFFE8EDF0);
         tv.setTextSize(20f);
+        tv.setMaxLines(1);
+        tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
         tv.setGravity(Gravity.CENTER_VERTICAL);
-        tv.setPadding(dp(8), 0, dp(8), 0);
+        tv.setPadding(dp(6), 0, dp(6), 0);
         return tv;
     }
 
@@ -447,19 +457,13 @@ public class TvMainActivity extends Activity
         String up = category.toUpperCase();
         if (up.contains("CALCIO") || up.contains("FOOTBALL") || up.contains("SOCCER")
                 || up.contains("UEFA") || up.contains("SERIE") || up.contains("CHAMPIONS")
-                || up.contains("PREMIER") || up.contains("LIGA")) return 0xFF1D7A3A;
-        if (up.contains("BASKET") || up.contains("NBA"))           return 0xFFC05000;
-        if (up.contains("TENNIS"))                                 return 0xFF2874A6;
+                || up.contains("PREMIER") || up.contains("LIGA") || up.contains("MONDIALI")
+                || up.contains("NATIONS") || up.contains("WORLD")) return 0xFF27AE60;
+        if (up.contains("BASKET") || up.contains("NBA"))            return 0xFFC05000;
+        if (up.contains("TENNIS"))                                  return 0xFF2874A6;
         if (up.contains("FORMULA") || up.contains("F1") || up.contains("MOTO")) return 0xFF8E1A0E;
-        if (up.contains("VOLLEY") || up.contains("RUGBY"))        return 0xFF6A1E8A;
-        return 0xFF374151;
-    }
-
-    private boolean isFootballCategory(String category) {
-        String up = category.toUpperCase();
-        return up.contains("CALCIO") || up.contains("FOOTBALL") || up.contains("SOCCER")
-            || up.contains("UEFA") || up.contains("CHAMPIONS") || up.contains("SERIE")
-            || up.contains("PREMIER") || up.contains("LIGA") || up.contains("CUP");
+        if (up.contains("VOLLEY") || up.contains("RUGBY"))         return 0xFF6A1E8A;
+        return 0xFF4FC3F7;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
