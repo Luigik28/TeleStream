@@ -1,7 +1,9 @@
 package org.telegram.tv.activity;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.media.AudioAttributes;
+import org.telegram.messenger.LocaleController;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -60,7 +62,7 @@ public class TvMainActivity extends Activity
     private TextView retryButton;
 
     // UI — events table
-    private View eventsContainer;
+    private LinearLayout eventsContainer;
     private LinearLayout eventsList;
     private FrameLayout eventsListFrame;
     private View focusCursor;
@@ -92,6 +94,7 @@ public class TvMainActivity extends Activity
         eventsContainer       = findViewById(R.id.events_container);
         eventsList            = findViewById(R.id.events_list);
         eventsListFrame       = findViewById(R.id.events_list_frame);
+        setupSettingsRow();
         playerContainer       = findViewById(R.id.player_container);
         streamLoading         = findViewById(R.id.stream_loading);
         streamTopBar          = findViewById(R.id.stream_top_bar);
@@ -692,6 +695,110 @@ public class TvMainActivity extends Activity
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Settings row — fixed at the bottom of the events container
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void setupSettingsRow() {
+        // Outer container: full-width, not focusable — pushes buttons to the right
+        LinearLayout outer = new LinearLayout(this);
+        outer.setOrientation(LinearLayout.HORIZONTAL);
+        outer.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        outer.setPadding(0, dp(4), dp(16), dp(4));
+
+        outer.addView(makeIconButton(
+            "↻",
+            getString(R.string.tv_refresh),
+            v -> session.pollForNewMessage()
+        ));
+
+        outer.addView(makeIconButton(
+            "☰",
+            LocaleController.getString(R.string.Settings),
+            v -> {
+                startActivity(new Intent(this, TvSettingsActivity.class));
+                overridePendingTransition(R.anim.tv_slide_in_right, 0);
+            }
+        ));
+
+        eventsContainer.addView(outer, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+    }
+
+    private LinearLayout makeIconButton(String icon, String label, View.OnClickListener onClick) {
+        LinearLayout btn = new LinearLayout(this);
+        btn.setOrientation(LinearLayout.HORIZONTAL);
+        btn.setGravity(Gravity.CENTER_VERTICAL);
+        btn.setFocusable(true);
+        btn.setClickable(true);
+        btn.setFocusableInTouchMode(false);
+        btn.setPadding(dp(14), dp(10), dp(14), dp(10));
+
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        btnLp.setMarginStart(dp(8));
+        btn.setLayoutParams(btnLp);
+
+        // Label sits in a container that starts at width=0 and expands on focus,
+        // clipping the text to reveal it smoothly from left.
+        final TextView labelView = new TextView(this);
+        labelView.setText(label);
+        labelView.setTextColor(0xFFFFFFFF);
+        labelView.setTextSize(14f);
+        labelView.setPadding(0, 0, dp(10), 0); // gap between text and icon
+        labelView.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        final int labelFullWidth = labelView.getMeasuredWidth();
+
+        FrameLayout labelClip = new FrameLayout(this);
+        labelClip.setClipChildren(true);
+        labelClip.addView(labelView, new FrameLayout.LayoutParams(
+            labelFullWidth, FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER_VERTICAL | Gravity.END));
+        btn.addView(labelClip, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        final TextView iconView = new TextView(this);
+        iconView.setText(icon);
+        iconView.setTextSize(22f);
+        iconView.setTextColor(0x55FFFFFF);
+        btn.addView(iconView, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        final android.animation.ValueAnimator[] activeAnim = {null};
+
+        btn.setOnFocusChangeListener((v, hasFocus) -> {
+            if (activeAnim[0] != null) activeAnim[0].cancel();
+            int startW = labelClip.getWidth();
+            int endW = hasFocus ? labelFullWidth : 0;
+            android.animation.ValueAnimator anim = android.animation.ValueAnimator.ofInt(startW, endW);
+            anim.addUpdateListener(a -> {
+                LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) labelClip.getLayoutParams();
+                lp.width = (int) a.getAnimatedValue();
+                labelClip.setLayoutParams(lp);
+            });
+            anim.setDuration(hasFocus ? 200 : 150);
+            anim.setInterpolator(new DecelerateInterpolator());
+            anim.start();
+            activeAnim[0] = anim;
+
+            if (hasFocus) {
+                hideFocusCursorAnimated();
+                iconView.setTextColor(0xFFFFFFFF);
+                android.graphics.drawable.GradientDrawable hl = new android.graphics.drawable.GradientDrawable();
+                hl.setColor(0x14FFFFFF);
+                hl.setCornerRadius(dp(20));
+                hl.setStroke(dp(1), 0x55FFFFFF);
+                v.setBackground(hl);
+            } else {
+                iconView.setTextColor(0x55FFFFFF);
+                v.setBackground(null);
+            }
+        });
+        btn.setOnClickListener(onClick);
+        return btn;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Focus cursor — animated highlight that slides between event rows
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -718,6 +825,19 @@ public class TvMainActivity extends Activity
         focusCursor.animate().cancel();
         focusCursor.setAlpha(0f);
         focusCursor.setY(0f);
+    }
+
+    private void hideFocusCursorAnimated() {
+        if (focusCursor == null || focusCursor.getAlpha() == 0f) return;
+        float currentY = focusCursor.getY();
+        focusCursor.animate().cancel();
+        focusCursor.animate()
+            .alpha(0f)
+            .y(currentY + dp(20))
+            .setDuration(200)
+            .setInterpolator(new DecelerateInterpolator())
+            .withEndAction(() -> focusCursor.setY(0f))
+            .start();
     }
 
     private void moveFocusCursorTo(View row) {

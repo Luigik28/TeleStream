@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tv_logout_confirm">Vuoi davvero disconnetterti?</string>
+    <string name="tv_refresh">Aggiorna</string>
+    <string name="tv_account_info">Info account</string>
+</resources>

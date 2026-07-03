@@ -2,4 +2,7 @@
 <resources>
     <string name="app_name">TeleStream</string>
     <string name="tv_login_steps">1. Open Telegram on your phone\n2. Go to Settings → Devices\n3. Tap "Link Desktop Device"\n4. Point your camera at this QR code</string>
+    <string name="tv_logout_confirm">Are you sure you want to log out?</string>
+    <string name="tv_refresh">Refresh</string>
+    <string name="tv_account_info">Account info</string>
 </resources>
