@@ -1,58 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
 
-    <!-- Dark background -->
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="#0D1B2A" />
-        </shape>
-    </item>
+    <!-- Background -->
+    <path
+        android:fillColor="#0D1B2A"
+        android:pathData="M0,0 H320 V180 H0 Z" />
 
-    <!-- Blue circle left -->
-    <item
-        android:left="32dp"
-        android:top="20dp"
-        android:right="224dp"
-        android:bottom="20dp">
-        <shape android:shape="oval">
-            <solid android:color="#2CA5E0" />
-        </shape>
-    </item>
+    <!-- Blue circle (center 80,85 radius 76) — mirrors ic_telestream circle -->
+    <path
+        android:fillColor="#2CA5E0"
+        android:pathData="M80,85m-76,0a76,76 0,1 1,152 0a76,76 0,1 1,-152 0" />
 
-    <!-- Accent bar top-right -->
-    <item
-        android:left="168dp"
-        android:top="56dp"
-        android:right="32dp"
-        android:bottom="112dp">
-        <shape android:shape="rectangle">
-            <solid android:color="#1A4A6A" />
-            <corners android:radius="3dp" />
-        </shape>
-    </item>
+    <!-- TV outer frame (white rounded rect, scaled 1.4x, centered at 80,85) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M35,51 Q35,45 40,45 L119,45 Q124,45 124,51 L124,104 Q124,110 119,110 L40,110 Q35,110 35,104 Z" />
 
-    <!-- Accent bar middle-right (blue) -->
-    <item
-        android:left="168dp"
-        android:top="76dp"
-        android:right="32dp"
-        android:bottom="92dp">
-        <shape android:shape="rectangle">
-            <solid android:color="#2CA5E0" />
-            <corners android:radius="3dp" />
-        </shape>
-    </item>
+    <!-- TV inner screen (dark) -->
+    <path
+        android:fillColor="#1A3A5C"
+        android:pathData="M40,51 L119,51 L119,104 L40,104 Z" />
 
-    <!-- Accent bar bottom-right -->
-    <item
-        android:left="168dp"
-        android:top="96dp"
-        android:right="56dp"
-        android:bottom="72dp">
-        <shape android:shape="rectangle">
-            <solid android:color="#1A4A6A" />
-            <corners android:radius="3dp" />
-        </shape>
-    </item>
+    <!-- TV left leg -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M57,110 L52,124 L60,124 L66,110 Z" />
 
-</layer-list>
+    <!-- TV right leg -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M94,110 L99,110 L108,124 L99,124 Z" />
+
+    <!-- TV base bar -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M49,121 L110,121 Q113,121 113,124 L113,127 Q113,129 110,129 L49,129 Q46,129 46,127 L46,124 Q46,121 49,121 Z" />
+
+    <!-- Paper plane body (Telegram identity) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M49,78 L105,62 L85,93 L74,86 Z" />
+
+    <!-- Paper plane wing fold -->
+    <path
+        android:fillColor="#D0E8F8"
+        android:pathData="M74,86 L85,93 L81,103 Z" />
+
+    <!-- Right side: streaming signal bars (decreasing width) -->
+    <path
+        android:fillColor="#2CA5E0"
+        android:pathData="M170,68 L305,68 L305,78 L170,78 Z" />
+    <path
+        android:fillColor="#4A90B8"
+        android:pathData="M170,88 L285,88 L285,98 L170,98 Z" />
+    <path
+        android:fillColor="#2A607A"
+        android:pathData="M170,108 L255,108 L255,118 L170,118 Z" />
+
+</vector>

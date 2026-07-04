@@ -187,7 +187,7 @@ public final class MessageParser {
         int i = 0;
         while (i < line.length()) {
             int cp = line.codePointAt(i);
-            if (Character.isLetter(cp) || cp > 0x2000) break; // stop at letter or emoji
+            if (Character.isLetter(cp)) break; // stop only at first letter; skip emoji too
             i += Character.charCount(cp);
         }
         return line.substring(i).trim();

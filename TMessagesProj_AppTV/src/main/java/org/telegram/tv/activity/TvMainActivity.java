@@ -11,8 +11,8 @@ import android.os.Looper;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.graphics.Color;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -62,10 +62,29 @@ public class TvMainActivity extends Activity
     private TextView retryButton;
 
     // UI — events table
-    private LinearLayout eventsContainer;
+    private FrameLayout eventsContainer;
     private LinearLayout eventsList;
     private FrameLayout eventsListFrame;
     private View focusCursor;
+
+    // UI — unified navigation panel (collapsed = 72dp icon-only, expanded = 320dp icon+label)
+    private LinearLayout navRail;       // the panel itself
+    private LinearLayout navRailItems;  // the scrollable category items inside
+    private FrameLayout userAvatar;     // avatar container in the panel header
+    private TextView userNameView;
+    private TextView userUsernameView;
+    private LinearLayout navSettings;   // settings row at the bottom
+    private View drawerScrim;
+    private FrameLayout contentArea;
+    private LinearLayout settingsPanel;
+    private android.graphics.drawable.ColorDrawable panelBg; // animated when expanding
+
+    // State — drawer + events + selection
+    private boolean drawerOpen = false;
+    private android.animation.ValueAnimator drawerAnim;
+    private List<StreamEvent> allEvents = new ArrayList<>();
+    private String selectedCategory = null;
+    private View selectedNavView = null;
 
     // UI — streaming player
     private View playerContainer;
@@ -92,9 +111,19 @@ public class TvMainActivity extends Activity
         instructionText       = findViewById(R.id.instruction_text);
         retryButton           = findViewById(R.id.retry_button);
         eventsContainer       = findViewById(R.id.events_container);
+        contentArea           = findViewById(R.id.content_area);
         eventsList            = findViewById(R.id.events_list);
         eventsListFrame       = findViewById(R.id.events_list_frame);
-        setupSettingsRow();
+        settingsPanel         = findViewById(R.id.settings_panel);
+        navRail               = findViewById(R.id.nav_rail);
+        navRailItems          = findViewById(R.id.nav_rail_items);
+        drawerScrim           = findViewById(R.id.drawer_scrim);
+        userAvatar            = findViewById(R.id.user_avatar);
+        userNameView          = findViewById(R.id.user_name);
+        userUsernameView      = findViewById(R.id.user_username);
+        navSettings           = findViewById(R.id.nav_settings);
+        setupDrawer();
+        buildSettingsPanel();
         playerContainer       = findViewById(R.id.player_container);
         streamLoading         = findViewById(R.id.stream_loading);
         streamTopBar          = findViewById(R.id.stream_top_bar);
@@ -143,8 +172,9 @@ public class TvMainActivity extends Activity
             streamLoading.setVisibility(View.GONE);
             streamTopBar.setVisibility(View.VISIBLE);
             eventsContainer.setVisibility(View.VISIBLE);
-            for (int i = 0; i < eventsList.getChildCount(); i++) {
-                View child = eventsList.getChildAt(i);
+            LinearLayout panel = settingsPanel.getVisibility() == View.VISIBLE ? settingsPanel : eventsList;
+            for (int i = 0; i < panel.getChildCount(); i++) {
+                View child = panel.getChildAt(i);
                 if (child.isFocusable()) { child.requestFocus(); break; }
             }
         }
@@ -164,8 +194,21 @@ public class TvMainActivity extends Activity
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK && playerContainer.getVisibility() == View.VISIBLE) {
-            closePlayer();
+        if (playerContainer.getVisibility() == View.VISIBLE) {
+            if (keyCode == KeyEvent.KEYCODE_BACK) { closePlayer(); return true; }
+            return super.onKeyDown(keyCode, event);
+        }
+        if (keyCode == KeyEvent.KEYCODE_BACK && eventsContainer.getVisibility() == View.VISIBLE) {
+            if (drawerOpen) closeDrawer(); else openDrawer();
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                && !drawerOpen && eventsContainer.getVisibility() == View.VISIBLE) {
+            openDrawer();
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && drawerOpen) {
+            closeDrawer();
             return true;
         }
         return super.onKeyDown(keyCode, event);
@@ -307,85 +350,23 @@ public class TvMainActivity extends Activity
 
     private void showEventsTable(MessageObject msg, List<StreamEvent> events) {
         clearWaitingState();
-        eventsList.removeAllViews();
+        allEvents = new ArrayList<>(events);
         resetFocusCursor();
 
-        int catIdx = -1;
-        String prevCategory = "";
-        List<View> animTargets = new ArrayList<>();
+        buildNavItems(events);
 
-        for (StreamEvent event : events) {
-            if (!event.category.equals(prevCategory)) {
-                catIdx++;
-                View header = createCategoryHeader(event.category);
-                eventsList.addView(header);
-                animTargets.add(header);
-                prevCategory = event.category;
-            }
-            View row = createEventRow(event, catIdx);
-            eventsList.addView(row);
-            animTargets.add(row);
-
-            View div = new View(this);
-            div.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 1));
-            div.setBackgroundColor(0xFF1E2A35);
-            eventsList.addView(div);
+        if (!events.isEmpty()) {
+            filterAndShowEvents(selectedCategory);
         }
 
-        // Staggered fade + slide-up entry
-        int delay = 0;
-        for (View v : animTargets) {
-            v.setAlpha(0f);
-            v.setTranslationY(dp(14));
-            v.animate()
-                    .alpha(1f)
-                    .translationY(0f)
-                    .setDuration(220)
-                    .setStartDelay(delay)
-                    .setInterpolator(new DecelerateInterpolator())
-                    .start();
-            delay += 28;
-        }
-
+        eventsListFrame.setVisibility(View.VISIBLE);
+        settingsPanel.setVisibility(View.GONE);
         loadingContainer.setVisibility(View.GONE);
         eventsContainer.setVisibility(View.VISIBLE);
-        for (int i = 0; i < eventsList.getChildCount(); i++) {
-            View child = eventsList.getChildAt(i);
-            if (child.isFocusable()) { child.requestFocus(); break; }
-        }
+        openDrawer();
     }
 
-    /** Full-width section header: solid left strip + gradient band fading to transparent. */
-    private View createCategoryHeader(String category) {
-        int base = categoryColor(category);
-        int r = (base >> 16) & 0xFF, g = (base >> 8) & 0xFF, b = base & 0xFF;
-
-        LinearLayout container = new LinearLayout(this);
-        container.setLayoutParams(new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        container.setOrientation(LinearLayout.HORIZONTAL);
-
-        View strip = new View(this);
-        strip.setBackgroundColor(base);
-        container.addView(strip, new LinearLayout.LayoutParams(dp(5), LinearLayout.LayoutParams.MATCH_PARENT));
-
-        TextView tv = new TextView(this);
-        tv.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        tv.setText(category.toUpperCase());
-        tv.setTextColor(base);
-        tv.setTextSize(13f);
-        tv.setTypeface(null, android.graphics.Typeface.BOLD);
-        tv.setPadding(dp(16), dp(16), dp(20), dp(8));
-        tv.setBackground(new android.graphics.drawable.GradientDrawable(
-            android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{Color.argb(70, r, g, b), Color.argb(0, r, g, b)}));
-        container.addView(tv);
-
-        return container;
-    }
-
-    private View createEventRow(StreamEvent event, int categoryIndex) {
+    private View createEventRow(StreamEvent event, int rowIndex) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setFocusable(true);
@@ -393,8 +374,7 @@ public class TvMainActivity extends Activity
         row.setFocusableInTouchMode(false);
         row.setGravity(Gravity.CENTER_VERTICAL);
 
-        // Zebra: alternate a barely-visible white tint between category groups
-        if (categoryIndex % 2 == 1) row.setBackgroundColor(0x0AFFFFFF);
+        if (rowIndex % 2 == 1) row.setBackgroundColor(0x0AFFFFFF);
 
         row.setOnFocusChangeListener((v, hasFocus) -> {
             if (hasFocus) moveFocusCursorTo(v);
@@ -680,8 +660,9 @@ public class TvMainActivity extends Activity
         streamLoading.setVisibility(View.GONE);
         streamTopBar.setVisibility(View.VISIBLE);
         eventsContainer.setVisibility(View.VISIBLE);
-        for (int i = 0; i < eventsList.getChildCount(); i++) {
-            View child = eventsList.getChildAt(i);
+        LinearLayout panel = settingsPanel.getVisibility() == View.VISIBLE ? settingsPanel : eventsList;
+        for (int i = 0; i < panel.getChildCount(); i++) {
+            View child = panel.getChildAt(i);
             if (child.isFocusable()) { child.requestFocus(); break; }
         }
     }
@@ -695,107 +676,382 @@ public class TvMainActivity extends Activity
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Settings row — fixed at the bottom of the events container
+    // Navigation drawer
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void setupSettingsRow() {
-        // Outer container: full-width, not focusable — pushes buttons to the right
-        LinearLayout outer = new LinearLayout(this);
-        outer.setOrientation(LinearLayout.HORIZONTAL);
-        outer.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        outer.setPadding(0, dp(4), dp(16), dp(4));
+    private void setupDrawer() {
+        // Collapsed state: clip the panel to 72dp (icon-only rail view).
+        // Expanding to 320dp reveals the labels — no separate drawer element.
+        panelBg = new android.graphics.drawable.ColorDrawable(0x00000000); // transparent initially
+        navRail.setBackground(panelBg);
+        navRail.setClipBounds(new android.graphics.Rect(0, 0, dp(72), 10000));
 
-        outer.addView(makeIconButton(
-            "↻",
-            getString(R.string.tv_refresh),
-            v -> session.pollForNewMessage()
-        ));
+        // Scrim: semi-transparent overlay, dims the content when the panel is expanded.
+        drawerScrim.setBackgroundColor(0x88000000);
+        drawerScrim.setOnClickListener(v -> closeDrawer());
 
-        outer.addView(makeIconButton(
-            "☰",
-            LocaleController.getString(R.string.Settings),
-            v -> {
-                startActivity(new Intent(this, TvSettingsActivity.class));
-                overridePendingTransition(R.anim.tv_slide_in_right, 0);
-            }
-        ));
+        TLRPC.User user = UserConfig.getInstance(account).getCurrentUser();
+        if (user != null) {
+            String firstName = user.first_name != null ? user.first_name : "";
+            String lastName  = user.last_name  != null ? user.last_name  : "";
+            String name = (firstName + " " + lastName).trim();
+            String username = (user.username != null && !user.username.isEmpty())
+                    ? "@" + user.username : "";
+            userNameView.setText(name.isEmpty() ? "Utente" : name);
+            userUsernameView.setText(username);
+            setupAvatars(user);
+        }
 
-        eventsContainer.addView(outer, new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        navSettings.setOnFocusChangeListener((v, hasFocus) ->
+            applyNavItemFocus(v, hasFocus, settingsPanel.getVisibility() == View.VISIBLE));
+        navSettings.setOnClickListener(v -> {
+            if (selectedNavView != null) { applyNavSelection(selectedNavView, false); selectedNavView = null; }
+            applyNavSelection(navSettings, true);
+            showSettingsPanel();
+            closeDrawer();
+        });
     }
 
-    private LinearLayout makeIconButton(String icon, String label, View.OnClickListener onClick) {
-        LinearLayout btn = new LinearLayout(this);
-        btn.setOrientation(LinearLayout.HORIZONTAL);
-        btn.setGravity(Gravity.CENTER_VERTICAL);
-        btn.setFocusable(true);
-        btn.setClickable(true);
-        btn.setFocusableInTouchMode(false);
-        btn.setPadding(dp(14), dp(10), dp(14), dp(10));
+    private void openDrawer() {
+        if (drawerOpen) return;
+        drawerOpen = true;
+        contentArea.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        drawerScrim.setVisibility(View.VISIBLE);
+        drawerScrim.animate().cancel();
+        drawerScrim.animate().alpha(1f).setDuration(260)
+                .setInterpolator(new DecelerateInterpolator()).start();
 
-        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        btnLp.setMarginStart(dp(8));
-        btn.setLayoutParams(btnLp);
+        if (drawerAnim != null) drawerAnim.cancel();
+        // Expand clip from 72dp (rail) to 320dp (full panel), animating the dark background in.
+        android.graphics.Rect cur = navRail.getClipBounds();
+        int startW = (cur != null) ? cur.right : dp(72);
+        final int H = 10000;
+        drawerAnim = android.animation.ValueAnimator.ofInt(startW, dp(320));
+        drawerAnim.setDuration(260);
+        drawerAnim.setInterpolator(new DecelerateInterpolator());
+        drawerAnim.addUpdateListener(va -> {
+            int w = (int) va.getAnimatedValue();
+            navRail.setClipBounds(new android.graphics.Rect(0, 0, w, H));
+            // Fade in dark background as the panel expands
+            float fraction = (float)(w - dp(72)) / (float)(dp(320) - dp(72));
+            panelBg.setAlpha((int)(0xCC * Math.max(0f, Math.min(1f, fraction))));
+        });
+        drawerAnim.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator a) {
+                navRail.setClipBounds(null);
+                panelBg.setAlpha(0xCC);
+            }
+        });
+        drawerAnim.start();
 
-        // Label sits in a container that starts at width=0 and expands on focus,
-        // clipping the text to reveal it smoothly from left.
-        final TextView labelView = new TextView(this);
+        handler.postDelayed(() -> {
+            View toFocus = selectedNavView != null ? selectedNavView : navRailItems.getChildAt(0);
+            if (toFocus != null) toFocus.requestFocus();
+        }, 260);
+    }
+
+    private void closeDrawer() {
+        if (!drawerOpen) return;
+        drawerOpen = false;
+
+        if (drawerAnim != null) drawerAnim.cancel();
+        final int H = 10000;
+        android.graphics.Rect cur = navRail.getClipBounds();
+        int startW = (cur != null) ? cur.right : dp(320);
+        drawerAnim = android.animation.ValueAnimator.ofInt(startW, dp(72));
+        drawerAnim.setDuration(200);
+        drawerAnim.setInterpolator(new android.view.animation.AccelerateInterpolator());
+        drawerAnim.addUpdateListener(va -> {
+            int w = (int) va.getAnimatedValue();
+            navRail.setClipBounds(new android.graphics.Rect(0, 0, w, H));
+            // Fade out dark background as the panel collapses
+            float fraction = (float)(w - dp(72)) / (float)(dp(320) - dp(72));
+            panelBg.setAlpha((int)(0xCC * Math.max(0f, Math.min(1f, fraction))));
+        });
+        drawerAnim.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator a) {
+                panelBg.setAlpha(0);
+            }
+        });
+        drawerAnim.start();
+
+        drawerScrim.animate().cancel();
+        drawerScrim.animate().alpha(0f).setDuration(200)
+                .withEndAction(() -> drawerScrim.setVisibility(View.INVISIBLE)).start();
+        contentArea.setDescendantFocusability(ViewGroup.FOCUS_BEFORE_DESCENDANTS);
+        handler.postDelayed(() -> {
+            LinearLayout panel = settingsPanel.getVisibility() == View.VISIBLE
+                    ? settingsPanel : eventsList;
+            for (int i = 0; i < panel.getChildCount(); i++) {
+                View child = panel.getChildAt(i);
+                if (child.isFocusable()) { child.requestFocus(); break; }
+            }
+        }, 210);
+    }
+
+    /**
+     * Adds a BackupImageView into each avatar container.
+     * AvatarDrawable provides the colored-initial fallback; BackupImageView
+     * downloads the real Telegram profile photo and displays it clipped to a circle.
+     */
+    private void setupAvatars(TLRPC.User user) {
+        placeAvatarView(userAvatar, user, dp(20)); // 40dp container → 20dp radius = circle
+    }
+
+    private void placeAvatarView(FrameLayout container, TLRPC.User user, int roundRadius) {
+        org.telegram.ui.Components.AvatarDrawable fallback =
+                new org.telegram.ui.Components.AvatarDrawable();
+        fallback.setInfo(account, user);
+
+        org.telegram.ui.Components.BackupImageView iv =
+                new org.telegram.ui.Components.BackupImageView(this);
+        iv.setRoundRadius(roundRadius);
+        iv.setForUserOrChat(user, fallback);
+
+        container.removeAllViews();
+        container.setBackground(null);
+        container.addView(iv, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+    }
+
+    private void buildNavItems(List<StreamEvent> events) {
+        navRailItems.removeAllViews();
+        selectedNavView = null;
+        selectedCategory = null;
+
+        List<String> categories = new ArrayList<>();
+        for (StreamEvent e : events) {
+            if (!categories.contains(e.category)) categories.add(e.category);
+        }
+
+        for (String cat : categories) {
+            int iconRes = categoryIconRes(cat);
+            navRailItems.addView(createNavItem(iconRes, cat, cat));
+        }
+
+        if (!categories.isEmpty()) {
+            selectedCategory = categories.get(0);
+            selectedNavView = navRailItems.getChildAt(0);
+            applyNavSelection(selectedNavView, true);
+        }
+    }
+
+    /**
+     * Creates a unified nav item: a fixed 72dp icon slot (icon centered at x=36dp)
+     * followed by a label. Clip to 72dp = icon-only rail; clip to 320dp = icon + label.
+     */
+    private View createNavItem(int iconRes, String label, String category) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.HORIZONTAL);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setFocusable(true);
+        item.setClickable(true);
+        item.setFocusableInTouchMode(false);
+        item.setTag(category);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(56));
+        lp.setMargins(0, dp(2), 0, dp(2));
+        item.setLayoutParams(lp);
+
+        // 72dp icon slot: icon 24dp centered at x=36dp — consistent with panel width at collapse
+        FrameLayout iconSlot = new FrameLayout(this);
+        android.widget.ImageView iconView = new android.widget.ImageView(this);
+        iconView.setImageResource(iconRes);
+        iconView.setColorFilter(0xFFCAC4D0, android.graphics.PorterDuff.Mode.SRC_IN);
+        iconView.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        FrameLayout.LayoutParams iconLp = new FrameLayout.LayoutParams(dp(24), dp(24));
+        iconLp.gravity = Gravity.CENTER;
+        iconSlot.addView(iconView, iconLp);
+        item.addView(iconSlot, new LinearLayout.LayoutParams(dp(72), LinearLayout.LayoutParams.MATCH_PARENT));
+
+        // Label — visible only when panel is expanded beyond 72dp
+        TextView tv = new TextView(this);
+        tv.setText(label);
+        tv.setTextColor(0xFFE6E1E5);
+        tv.setTextSize(14f);
+        tv.setMaxLines(1);
+        tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams tvLp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        tvLp.setMarginEnd(dp(16));
+        tv.setLayoutParams(tvLp);
+        item.addView(tv);
+
+        item.setOnFocusChangeListener((v, hasFocus) ->
+            applyNavItemFocus(v, hasFocus, v == selectedNavView));
+        item.setOnClickListener(v -> {
+            if (selectedNavView != null) applyNavSelection(selectedNavView, false);
+            applyNavSelection(navSettings, false);
+            selectedNavView = v;
+            selectedCategory = category;
+            applyNavSelection(v, true);
+            showEventsPanel();
+            filterAndShowEvents(category);
+            closeDrawer();
+        });
+        return item;
+    }
+
+
+    /** Returns the drawable resource ID for the icon that represents a sport category. */
+    private int categoryIconRes(String category) {
+        String up = category.toUpperCase();
+        if (up.contains("CALCIO") || up.contains("FOOTBALL") || up.contains("SOCCER")
+                || up.contains("UEFA") || up.contains("SERIE") || up.contains("CHAMPIONS")
+                || up.contains("PREMIER") || up.contains("LIGA") || up.contains("MONDIALI")
+                || up.contains("NATIONS") || up.contains("WORLD"))    return R.drawable.ic_sport_soccer;
+        if (up.contains("BASKET") || up.contains("NBA"))              return R.drawable.ic_sport_basketball;
+        if (up.contains("TENNIS") || up.contains("WIMBLEDON"))        return R.drawable.ic_sport_tennis;
+        if (up.contains("FORMULA") || up.contains("F1")
+                || up.contains("MOTO") || up.contains("GP"))          return R.drawable.ic_sport_motorsport;
+        if (up.contains("VOLLEY"))                                     return R.drawable.ic_sport_volleyball;
+        if (up.contains("RUGBY"))                                      return R.drawable.ic_sport_rugby;
+        return R.drawable.ic_sport_soccer; // fallback
+    }
+
+    private void filterAndShowEvents(String category) {
+        eventsList.removeAllViews();
+        resetFocusCursor();
+
+        List<View> animTargets = new ArrayList<>();
+        int rowIdx = 0;
+        for (StreamEvent event : allEvents) {
+            if (!event.category.equals(category)) continue;
+            View row = createEventRow(event, rowIdx++);
+            eventsList.addView(row);
+            animTargets.add(row);
+            View div = new View(this);
+            div.setLayoutParams(new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 1));
+            div.setBackgroundColor(0xFF1E2A35);
+            eventsList.addView(div);
+        }
+
+        int delay = 0;
+        for (View v : animTargets) {
+            v.setAlpha(0f);
+            v.setTranslationY(dp(14));
+            v.animate().alpha(1f).translationY(0f).setDuration(220)
+                    .setStartDelay(delay).setInterpolator(new DecelerateInterpolator()).start();
+            delay += 28;
+        }
+    }
+
+    private void showEventsPanel() {
+        eventsListFrame.setVisibility(View.VISIBLE);
+        settingsPanel.setVisibility(View.GONE);
+    }
+
+    private void showSettingsPanel() {
+        eventsListFrame.setVisibility(View.GONE);
+        settingsPanel.setVisibility(View.VISIBLE);
+        resetFocusCursor();
+    }
+
+    private void buildSettingsPanel() {
+        settingsPanel.removeAllViews();
+
+        settingsPanel.addView(makeSettingsRow("Aggiorna eventi",
+                v -> session.pollForNewMessage(), false));
+
+        View sep = new View(this);
+        LinearLayout.LayoutParams sepLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 1);
+        sepLp.setMargins(0, dp(4), 0, dp(4));
+        sep.setLayoutParams(sepLp);
+        sep.setBackgroundColor(0xFF1E2A35);
+        settingsPanel.addView(sep);
+
+        settingsPanel.addView(makeSettingsRow("Disconnetti",
+                v -> confirmLogout(), true));
+    }
+
+    private LinearLayout makeSettingsRow(String label,
+            View.OnClickListener onClick, boolean destructive) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setFocusable(true);
+        row.setClickable(true);
+        row.setFocusableInTouchMode(false);
+        row.setPadding(dp(24), dp(20), dp(24), dp(20));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(4), 0, dp(4));
+        row.setLayoutParams(lp);
+
+        TextView labelView = new TextView(this);
         labelView.setText(label);
-        labelView.setTextColor(0xFFFFFFFF);
-        labelView.setTextSize(14f);
-        labelView.setPadding(0, 0, dp(10), 0); // gap between text and icon
-        labelView.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        final int labelFullWidth = labelView.getMeasuredWidth();
+        labelView.setTextColor(destructive ? 0xFFE74C3C : 0xFFFFFFFF);
+        labelView.setTextSize(20f);
+        row.addView(labelView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        FrameLayout labelClip = new FrameLayout(this);
-        labelClip.setClipChildren(true);
-        labelClip.addView(labelView, new FrameLayout.LayoutParams(
-            labelFullWidth, FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.CENTER_VERTICAL | Gravity.END));
-        btn.addView(labelClip, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        final TextView iconView = new TextView(this);
-        iconView.setText(icon);
-        iconView.setTextSize(22f);
-        iconView.setTextColor(0x55FFFFFF);
-        btn.addView(iconView, new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        final android.animation.ValueAnimator[] activeAnim = {null};
-
-        btn.setOnFocusChangeListener((v, hasFocus) -> {
-            if (activeAnim[0] != null) activeAnim[0].cancel();
-            int startW = labelClip.getWidth();
-            int endW = hasFocus ? labelFullWidth : 0;
-            android.animation.ValueAnimator anim = android.animation.ValueAnimator.ofInt(startW, endW);
-            anim.addUpdateListener(a -> {
-                LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) labelClip.getLayoutParams();
-                lp.width = (int) a.getAnimatedValue();
-                labelClip.setLayoutParams(lp);
-            });
-            anim.setDuration(hasFocus ? 200 : 150);
-            anim.setInterpolator(new DecelerateInterpolator());
-            anim.start();
-            activeAnim[0] = anim;
-
+        row.setOnFocusChangeListener((v, hasFocus) -> {
             if (hasFocus) {
-                hideFocusCursorAnimated();
-                iconView.setTextColor(0xFFFFFFFF);
-                android.graphics.drawable.GradientDrawable hl = new android.graphics.drawable.GradientDrawable();
-                hl.setColor(0x14FFFFFF);
-                hl.setCornerRadius(dp(20));
-                hl.setStroke(dp(1), 0x55FFFFFF);
+                android.graphics.drawable.GradientDrawable hl =
+                        new android.graphics.drawable.GradientDrawable();
+                hl.setColor(destructive ? 0x14E74C3C : 0x14FFFFFF);
+                hl.setCornerRadius(dp(12));
+                hl.setStroke(dp(1), destructive ? 0x55E74C3C : 0x55FFFFFF);
                 v.setBackground(hl);
             } else {
-                iconView.setTextColor(0x55FFFFFF);
                 v.setBackground(null);
             }
         });
-        btn.setOnClickListener(onClick);
-        return btn;
+        row.setOnClickListener(onClick);
+        return row;
+    }
+
+    private void confirmLogout() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(LocaleController.getString(R.string.LogOutTitle))
+                .setMessage(getString(R.string.tv_logout_confirm))
+                .setPositiveButton(LocaleController.getString(R.string.OK), (d, w) -> doLogout())
+                .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+                .show();
+    }
+
+    private void doLogout() {
+        MessagesController.getInstance(account).performLogout(1);
+        Intent intent = new Intent(this, org.telegram.tv.login.TvLaunchActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+    }
+
+    /**
+     * Material 3 TV active indicator: stadium shape (cornerRadius = half item height = 28dp),
+     * SecondaryContainer fill when selected, StateLayer (white 10%) on focus.
+     */
+    private void applyNavItemFocus(View v, boolean hasFocus, boolean isSelected) {
+        android.graphics.drawable.GradientDrawable bg =
+                new android.graphics.drawable.GradientDrawable();
+        bg.setCornerRadius(dp(28)); // stadium (ShapeDefaults.Full for 56dp height)
+        if (hasFocus && isSelected) {
+            bg.setColor(0x404FC3F7); // SecondaryContainer tint + state layer
+        } else if (hasFocus) {
+            bg.setColor(0x1FFFFFFF); // state layer: white 12%
+        } else if (isSelected) {
+            applyNavSelection(v, true);
+            return;
+        } else {
+            v.setBackground(null);
+            return;
+        }
+        v.setBackground(bg);
+    }
+
+    private void applyNavSelection(View v, boolean selected) {
+        if (selected) {
+            // Active indicator: SecondaryContainer equivalent for our blue accent theme
+            android.graphics.drawable.GradientDrawable sel =
+                    new android.graphics.drawable.GradientDrawable();
+            sel.setCornerRadius(dp(28)); // stadium shape
+            sel.setColor(0x264FC3F7);    // blue SecondaryContainer at 15% opacity
+            v.setBackground(sel);
+        } else {
+            v.setBackground(null);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -817,6 +1073,7 @@ public class TvMainActivity extends Activity
 
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, dp(60));
+        lp.leftMargin = dp(88); // align cursor left edge with events_list paddingStart
         eventsListFrame.addView(focusCursor, lp);
     }
 
@@ -825,19 +1082,6 @@ public class TvMainActivity extends Activity
         focusCursor.animate().cancel();
         focusCursor.setAlpha(0f);
         focusCursor.setY(0f);
-    }
-
-    private void hideFocusCursorAnimated() {
-        if (focusCursor == null || focusCursor.getAlpha() == 0f) return;
-        float currentY = focusCursor.getY();
-        focusCursor.animate().cancel();
-        focusCursor.animate()
-            .alpha(0f)
-            .y(currentY + dp(20))
-            .setDuration(200)
-            .setInterpolator(new DecelerateInterpolator())
-            .withEndAction(() -> focusCursor.setY(0f))
-            .start();
     }
 
     private void moveFocusCursorTo(View row) {
