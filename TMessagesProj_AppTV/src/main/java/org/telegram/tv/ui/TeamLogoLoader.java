@@ -33,7 +33,9 @@ public final class TeamLogoLoader {
 
     private static final String TAG = "TeamLogoLoader";
 
-    private final Map<String, Bitmap> cache = new ConcurrentHashMap<>();
+    // SoftReference allows GC to reclaim bitmaps under memory pressure (e.g. during streaming)
+    // without needing an explicit eviction policy.
+    private final Map<String, java.lang.ref.SoftReference<Bitmap>> cache = new ConcurrentHashMap<>();
     // tracks keys already requested (in-flight or completed/failed) to avoid duplicate fetches
     private final Set<String> requested = ConcurrentHashMap.newKeySet();
     private final ExecutorService executor = Executors.newCachedThreadPool();
@@ -52,8 +54,9 @@ public final class TeamLogoLoader {
     public void load(String teamName, ImageView iv) {
         String key = teamName.toLowerCase(Locale.ROOT).trim();
 
-        Bitmap cached = cache.get(key);
-        if (cached != null) {
+        java.lang.ref.SoftReference<Bitmap> ref = cache.get(key);
+        Bitmap cached = ref != null ? ref.get() : null;
+        if (cached != null && !cached.isRecycled()) {
             iv.setImageBitmap(cached);
             return;
         }
@@ -66,7 +69,22 @@ public final class TeamLogoLoader {
         executor.execute(() -> fetchFromSportsDb(normalized, key, teamName, iv));
     }
 
+    /**
+     * Recycles all cached bitmaps and clears the cache.
+     * Call before starting video streaming to free heap before the GC-intensive decode pipeline runs.
+     * Logos will be re-fetched on next use.
+     */
+    public void clearCache() {
+        for (java.lang.ref.SoftReference<Bitmap> ref : cache.values()) {
+            Bitmap bmp = ref.get();
+            if (bmp != null && !bmp.isRecycled()) bmp.recycle();
+        }
+        cache.clear();
+        requested.clear(); // allow re-fetching after the stream ends
+    }
+
     public void shutdown() {
+        clearCache();
         executor.shutdownNow();
     }
 
@@ -128,7 +146,7 @@ public final class TeamLogoLoader {
             Bitmap bmp = BitmapFactory.decodeStream(imgConn.getInputStream(), null, opts);
 
             if (bmp != null) {
-                cache.put(cacheKey, bmp);
+                cache.put(cacheKey, new java.lang.ref.SoftReference<>(bmp));
                 AndroidUtilities.runOnUIThread(() -> iv.setImageBitmap(bmp));
                 android.util.Log.d(TAG, "loaded [" + normalized + "]");
             } else {

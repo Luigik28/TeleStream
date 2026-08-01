@@ -1,7 +1,7 @@
 package org.telegram.tv.model;
 
 /** Immutable data class representing one streamable event from the bot's calendar. */
-public final class StreamEvent {
+public final class StreamEvent implements java.io.Serializable {
 
     public final String category;
     public final String eventName;

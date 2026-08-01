@@ -24,6 +24,11 @@ public final class BotSession {
 
     public interface Listener {
         void onStatus(String message);
+        /**
+         * A named step changed state. key is stable across calls for the same step.
+         * completed=false → step is active (show spinner); completed=true → done (show checkmark).
+         */
+        void onStep(String key, boolean completed, String label);
         /** Bot sent /start; waiting for the user to act on their phone. */
         void onWaitingForPhone();
         /** All access-required channels processed; still waiting for phone confirmation. */
@@ -54,7 +59,7 @@ public final class BotSession {
     // ─── Public API ────────────────────────────────────────────────────────────
 
     public void start() {
-        listener.onStatus("Connessione…");
+        listener.onStatus("Avvio TeleStream…");
         resolveBot();
     }
 
@@ -63,8 +68,13 @@ public final class BotSession {
         dialogId          = 0;
         botPeer           = null;
         lastSeenMessageId = 0;
-        listener.onStatus("Connessione…");
+        listener.onStatus("Avvio TeleStream…");
         resolveBot();
+    }
+
+    /** Returns a random delay in ms that simulates human interaction pace (1500–2500 ms). */
+    private static int randomDelay() {
+        return 1500 + (int) (Math.random() * 1000);
     }
 
     /** The bot's dialog ID; 0 until {@link #start()} resolves the username. */
@@ -97,7 +107,9 @@ public final class BotSession {
         if (MessageParser.isAccessRequiredMessage(msg)) {
             List<String> urls = MessageParser.extractChannelUrlsFromMarkup(msg);
             android.util.Log.d(TAG, "access required — " + urls.size() + " canali");
-            listener.onStatus("Elaborazione " + urls.size() + " canali…");
+            int n = urls.size();
+            listener.onStep("ch_header", false,
+                "Accesso a " + n + (n == 1 ? " canale" : " canali") + "…");
             processChannelsSequentially(urls, 0, () -> listener.onChannelsProcessed());
             return true;
         }
@@ -116,6 +128,7 @@ public final class BotSession {
     // ─── Bot resolution + history check ────────────────────────────────────────
 
     private void resolveBot() {
+        listener.onStep("resolve", false, "Connessione al bot…");
         TLRPC.TL_contacts_resolveUsername req = new TLRPC.TL_contacts_resolveUsername();
         req.username = botUsername;
         ConnectionsManager.getInstance(account).sendRequest(req, (response, error) ->
@@ -138,6 +151,8 @@ public final class BotSession {
                     peer.user_id     = dialogId;
                     peer.access_hash = botUser != null ? botUser.access_hash : 0;
                     botPeer = peer;
+                    listener.onStep("resolve", true, "Bot connesso");
+                    listener.onStep("check", false, "Verifica ultimo messaggio…");
                     checkLastMessageAndProceed(peer);
                 }
             })
@@ -145,8 +160,6 @@ public final class BotSession {
     }
 
     private void checkLastMessageAndProceed(TLRPC.InputPeer peer) {
-        listener.onStatus("Controllo ultimo messaggio…");
-
         TLRPC.TL_messages_getHistory req = new TLRPC.TL_messages_getHistory();
         req.peer = peer;
         req.limit = 1;
@@ -162,8 +175,10 @@ public final class BotSession {
 
                 if (lastMsg == null || !isToday(lastMsg.date)) {
                     android.util.Log.d(TAG, "no message today — sending /start");
-                    sendStart();
+                    listener.onStep("check", true, "Nessun messaggio odierno");
+                    listener.onStep("start", false, "Invio /start al bot…");
                     listener.onWaitingForPhone();
+                    handler.postDelayed(() -> sendStart(), randomDelay());
                     return;
                 }
 
@@ -172,15 +187,20 @@ public final class BotSession {
                     android.util.Log.d(TAG, "today's events found — displaying directly");
                     List<StreamEvent> events = MessageParser.parseEventsMessage(msgObj);
                     if (!events.isEmpty()) {
+                        listener.onStep("check", true, "Calendario odierno trovato");
                         listener.onEventsReady(msgObj, events);
                     } else {
-                        sendStart();
+                        listener.onStep("check", true, "Nessun calendario odierno");
+                        listener.onStep("start", false, "Invio /start al bot…");
                         listener.onWaitingForPhone();
+                        handler.postDelayed(() -> sendStart(), randomDelay());
                     }
                 } else {
                     android.util.Log.d(TAG, "message today but not events — sending /start");
-                    sendStart();
+                    listener.onStep("check", true, "Nessun calendario odierno");
+                    listener.onStep("start", false, "Invio /start al bot…");
                     listener.onWaitingForPhone();
+                    handler.postDelayed(() -> sendStart(), randomDelay());
                 }
             })
         );
@@ -189,10 +209,10 @@ public final class BotSession {
     private void sendStart() {
         if (startSent) return;
         startSent = true;
-        listener.onStatus("Invio /start…");
         SendMessagesHelper.getInstance(account).sendMessage(
             SendMessagesHelper.SendMessageParams.of(
                 "/start", dialogId, null, null, null, false, null, null, null, true, 0, 0, null, false));
+        listener.onStep("start", true, "/start inviato");
     }
 
     private static boolean isToday(int unixSeconds) {
@@ -206,13 +226,22 @@ public final class BotSession {
     // ─── Channel joining: sequential, with per-channel timeouts ────────────────
 
     private void processChannelsSequentially(List<String> urls, int index, Runnable onAllDone) {
-        listener.onStatus("ricevuti " + urls.size() + " canali, " + index + " index");
         if (index >= urls.size()) {
+            listener.onStep("ch_header", true,
+                urls.size() + (urls.size() == 1 ? " canale elaborato" : " canali elaborati"));
             onAllDone.run();
             return;
         }
-        processOneChannel(urls.get(index),
-            () -> processChannelsSequentially(urls, index + 1, onAllDone));
+        String key   = "ch_" + index;
+        String label = "Canale " + (index + 1) + " di " + urls.size();
+        listener.onStep(key, false, label + "…");
+        processOneChannel(urls.get(index), () -> {
+            listener.onStep(key, true, label);
+            // Human-paced delay before processing the next channel
+            handler.postDelayed(
+                () -> processChannelsSequentially(urls, index + 1, onAllDone),
+                randomDelay());
+        });
     }
 
     private void processOneChannel(String url, Runnable onDone) {
@@ -221,9 +250,10 @@ public final class BotSession {
 
         AtomicBoolean done = new AtomicBoolean(false);
         Runnable once = () -> { if (done.compareAndSet(false, true)) onDone.run(); };
+        // Generous timeout: check + possible random delay + join + mute/archive
         handler.postDelayed(() -> {
             if (!done.get()) { android.util.Log.w(TAG, "checkChatInvite timeout"); once.run(); }
-        }, 15000);
+        }, 30000);
 
         TLRPC.TL_messages_checkChatInvite req = new TLRPC.TL_messages_checkChatInvite();
         req.hash = hash;
@@ -231,11 +261,13 @@ public final class BotSession {
             AndroidUtilities.runOnUIThread(() -> {
                 try {
                     if (response instanceof TLRPC.TL_chatInviteAlready) {
+                        // Already member: mute+archive immediately (no join needed)
                         TLRPC.Chat chat = ((TLRPC.TL_chatInviteAlready) response).chat;
                         MessagesController.getInstance(account).putChat(chat, false);
                         muteAndArchive(account, chat, once);
                     } else if (response != null) {
-                        joinChannel(hash, once);
+                        // Human-paced delay before the JOIN request to avoid rate-limiting
+                        handler.postDelayed(() -> joinChannel(hash, once), randomDelay());
                     } else {
                         once.run();
                     }

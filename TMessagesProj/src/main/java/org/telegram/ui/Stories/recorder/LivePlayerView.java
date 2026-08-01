@@ -155,18 +155,20 @@ public class LivePlayerView extends FrameLayout implements RendererCommon.Render
     private boolean firstFrameRendered;
     @Override
     public void onFirstFrameRendered() {
-        if (!firstFrameRendered) {
-            if (scope != null && !scope.firstFrameRendered) {
-                scope.firstFrameRendered = true;
-                scope.invalidate();
+        org.telegram.messenger.AndroidUtilities.runOnUIThread(() -> {
+            if (!firstFrameRendered) {
+                if (scope != null && !scope.firstFrameRendered) {
+                    scope.firstFrameRendered = true;
+                    scope.invalidate();
+                }
+                firstFrameRendered = true;
             }
-            firstFrameRendered = true;
-        }
-        setTextureVisible(true, true);
-        if (firstFrameCallback != null) {
-            firstFrameCallback.run();
-            firstFrameCallback = null;
-        }
+            setTextureVisible(true, true);
+            if (firstFrameCallback != null) {
+                firstFrameCallback.run();
+                firstFrameCallback = null;
+            }
+        });
     }
 
     public void release() {
