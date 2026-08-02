@@ -18,3 +18,4 @@ setup-build-env.sh
 buildSrc/
 TMessagesProj/build
 TMessagesProj_AppTV/build
+TMessagesProj/jni/ffmpeg/build_android
