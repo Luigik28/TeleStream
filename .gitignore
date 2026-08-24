@@ -13,9 +13,3 @@ TMessagesProj_App/afat/
 TMessagesProj_AppHockeyApp/afat/
 TMessagesProj_AppStandalone/afat/
 TMessagesProj_AppHuawei/afat/
-.vscode/
-setup-build-env.sh
-buildSrc/
-TMessagesProj/build
-TMessagesProj_AppTV/build
-TMessagesProj/jni/ffmpeg/build_android
