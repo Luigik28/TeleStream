@@ -136,6 +136,7 @@ public class TvMainActivity extends Activity
     @Override
     protected void onPause() {
         super.onPause();
+        ConnectionsManager.getInstance(account).setAppPaused(true, false);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if (playerContainer.getVisibility() == View.VISIBLE) {
             destroyPlayer();
@@ -153,6 +154,10 @@ public class TvMainActivity extends Activity
     @Override
     protected void onResume() {
         super.onResume();
+        // Same reasoning as TvLoginActivity: without this, ConnectionsManager keeps treating
+        // the account as backgrounded/paused (set by TvLoginActivity.onPause() on the way here,
+        // or by our own onPause() on the way back), and BotSession's requests stall silently.
+        ConnectionsManager.getInstance(account).setAppPaused(false, false);
         NotificationCenter.getInstance(account).removeObserver(this, NotificationCenter.didReceiveNewMessages);
         NotificationCenter.getInstance(account).addObserver(this, NotificationCenter.didReceiveNewMessages);
         // If the user went to their phone to open the mini app and came back, check immediately.
