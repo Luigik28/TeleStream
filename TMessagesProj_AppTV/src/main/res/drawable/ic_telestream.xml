@@ -2,47 +2,43 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
+    android:viewportWidth="320"
+    android:viewportHeight="320">
 
-    <!-- Blue circle background (Telegram style) -->
+    <!-- Blue rounded-square background -->
     <path
-        android:fillColor="#2CA5E0"
-        android:pathData="M54,54m-54,0a54,54 0,1 1,108 0a54,54 0,1 1,-108 0" />
+        android:fillColor="#229ED9"
+        android:pathData="M72,0 L248,0 A72,72 0 0 1 320,72 L320,248 A72,72 0 0 1 248,320 L72,320 A72,72 0 0 1 0,248 L0,72 A72,72 0 0 1 72,0 Z" />
 
-    <!-- TV screen outer frame (rounded rectangle) -->
+    <!-- TV stand neck -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M22,30 Q22,26 26,26 L82,26 Q86,26 86,30 L86,68 Q86,72 82,72 L26,72 Q22,72 22,68 Z" />
+        android:pathData="M136,226 L184,226 L184,252 L136,252 Z" />
 
-    <!-- TV screen inner (dark screen area) -->
-    <path
-        android:fillColor="#1A3A5C"
-        android:pathData="M26,30 L82,30 L82,68 L26,68 Z" />
-
-    <!-- TV stand/base left leg -->
+    <!-- TV base foot -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M38,72 L34,82 L40,82 L44,72 Z" />
+        android:pathData="M114,246 L206,246 A8,8 0 0 1 214,254 L214,254 A8,8 0 0 1 206,262 L114,262 A8,8 0 0 1 106,254 L106,254 A8,8 0 0 1 114,246 Z" />
 
-    <!-- TV stand/base right leg -->
+    <!-- TV outer frame -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M64,72 L68,72 L74,82 L68,82 Z" />
+        android:pathData="M62,66 L258,66 A22,22 0 0 1 280,88 L280,212 A22,22 0 0 1 258,234 L62,234 A22,22 0 0 1 40,212 L40,88 A22,22 0 0 1 62,66 Z" />
 
-    <!-- TV base bar -->
+    <!-- TV dark screen -->
+    <path
+        android:fillColor="#17212B"
+        android:pathData="M68,82 L252,82 A12,12 0 0 1 264,94 L264,206 A12,12 0 0 1 252,218 L68,218 A12,12 0 0 1 56,206 L56,94 A12,12 0 0 1 68,82 Z" />
+
+    <!-- Paper plane -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M32,80 L76,80 Q78,80 78,82 L78,84 Q78,86 76,86 L32,86 Q30,86 30,84 L30,82 Q30,80 32,80 Z" />
-
-    <!-- Paper plane inside the screen (Telegram identity) -->
-    <!-- Body of plane pointing right -->
+        android:pathData="M98,146 L218,108 L150,164 Z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M32,49 L72,38 L58,60 L50,55 Z" />
-    <!-- Wing fold -->
+        android:fillColor="#9DC2D8"
+        android:pathData="M150,164 L218,108 L176,194 Z" />
     <path
-        android:fillColor="#D0E8F8"
-        android:pathData="M50,55 L58,60 L55,67 Z" />
+        android:fillColor="#E6F1F8"
+        android:pathData="M150,164 L176,194 L142,184 Z" />
 
 </vector>

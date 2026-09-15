@@ -2,6 +2,7 @@ package org.telegram.tv.bot;
 
 import org.telegram.messenger.MessageObject;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.tgnet.tl.TL_keyboard;
 import org.telegram.tv.model.StreamEvent;
 
 import java.util.ArrayList;
@@ -37,11 +38,11 @@ public final class MessageParser {
     public static boolean isAccessRequiredMessage(MessageObject msg) {
         if (!(msg.messageOwner.reply_markup instanceof TLRPC.TL_replyInlineMarkup)) return false;
         TLRPC.TL_replyInlineMarkup markup = (TLRPC.TL_replyInlineMarkup) msg.messageOwner.reply_markup;
-        for (TLRPC.TL_keyboardButtonRow row : markup.rows) {
-            for (TLRPC.KeyboardButton btn : row.buttons) {
-                if (btn instanceof TLRPC.TL_keyboardButtonCallback) return true;
-                if (btn instanceof TLRPC.TL_keyboardButtonUrl
-                        && isInviteLink(((TLRPC.TL_keyboardButtonUrl) btn).url)) return true;
+        for (TL_keyboard.KeyboardInlineButtonRow row : markup.rows) {
+            for (TL_keyboard.KeyboardInlineButton btn : row.buttons) {
+                if (btn.type instanceof TL_keyboard.TL_inlineButtonTypeCallback) return true;
+                if (btn.type instanceof TL_keyboard.TL_inlineButtonTypeUrl
+                        && isInviteLink(((TL_keyboard.TL_inlineButtonTypeUrl) btn.type).url)) return true;
             }
         }
         return false;
@@ -70,10 +71,10 @@ public final class MessageParser {
     public static List<String> extractChannelUrlsFromMarkup(MessageObject msg) {
         List<String> urls = new ArrayList<>();
         if (!(msg.messageOwner.reply_markup instanceof TLRPC.TL_replyInlineMarkup)) return urls;
-        for (TLRPC.TL_keyboardButtonRow row : ((TLRPC.TL_replyInlineMarkup) msg.messageOwner.reply_markup).rows) {
-            for (TLRPC.KeyboardButton btn : row.buttons) {
-                if (btn instanceof TLRPC.TL_keyboardButtonUrl) {
-                    String url = ((TLRPC.TL_keyboardButtonUrl) btn).url;
+        for (TL_keyboard.KeyboardInlineButtonRow row : ((TLRPC.TL_replyInlineMarkup) msg.messageOwner.reply_markup).rows) {
+            for (TL_keyboard.KeyboardInlineButton btn : row.buttons) {
+                if (btn.type instanceof TL_keyboard.TL_inlineButtonTypeUrl) {
+                    String url = ((TL_keyboard.TL_inlineButtonTypeUrl) btn.type).url;
                     if (isInviteLink(url) && !btn.text.contains("✅")) {
                         urls.add(url);
                     }

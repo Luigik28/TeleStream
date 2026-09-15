@@ -14,7 +14,6 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.google.zxing.EncodeHintType;
-import com.google.zxing.qrcode.QRCodeWriter;
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -24,6 +23,7 @@ import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
+import org.telegram.messenger.TelegramQRCodeWriter;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.tv.R;
 import org.telegram.tgnet.ConnectionsManager;
@@ -31,48 +31,53 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.tv.activity.TvMainActivity;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 
 /**
  * TV QR login screen.
  *
  * Protocol:
- *  - TV calls exportLoginToken once to get a token (valid ~30s), shows as QR.
+ *  - TV calls exportLoginToken once to get a token (valid ~30s server-side), shows it as QR,
+ *    and leaves that QR untouched on screen for its whole validity window.
  *  - Phone scans QR, calls importLoginToken (phone side) to confirm.
- *  - TV schedules the next exportLoginToken call just before the token expires.
- *    If the phone already confirmed, the server returns loginTokenSuccess instead
- *    of a new pending token.
+ *  - While the QR is shown, the TV checks confirmation status every POLL_INTERVAL_MS by calling
+ *    exportLoginToken again, but only acts on the response if it's loginTokenSuccess/migrateTo —
+ *    a still-pending response never changes what's on screen.
+ *  - Once the token's own `expires` timestamp passes, the TV stops polling and shows a manual
+ *    Refresh button instead of silently fetching/showing a new QR.
  *
  * importLoginToken is intentionally NOT called by the TV — that is the phone's method.
- * DO NOT poll exportLoginToken rapidly: every call generates a new token, which
- * invalidates the QR that the phone is trying to scan.
  */
 public class TvLoginActivity extends Activity implements NotificationCenter.NotificationCenterDelegate {
 
     private static final int ACCOUNT = 0;
-    /** Refresh QR this many seconds before the token expires. */
-    private static final int REFRESH_MARGIN_SEC = 5;
     private static final String TAG = "TvLogin";
+    /** How often we check whether the phone has confirmed the currently displayed QR. */
+    private static final long POLL_INTERVAL_MS = 2000L;
 
     private ImageView qrImageView;
     private TextView statusText;
     private Button refreshButton;
-    private byte[] pendingToken;   // new token ready to show after user presses Refresh
-    private boolean autoShowQr = true; // true → show QR when token arrives; false → show Refresh button
 
-    private final Handler handler = new Handler(Looper.getMainLooper());
+    /** Token currently shown as QR, and the second (epoch) it expires at. */
     private byte[] currentToken;
     private int tokenExpires = 0;
+
+    /** A token fetched by a confirmation check that differs from currentToken — kept so
+     *  pressing Refresh can show it immediately instead of doing another round trip. */
+    private byte[] pendingToken;
+    private int pendingTokenExpires = 0;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean destroyed = false;
     private boolean loginCompleted = false;
     private int pollCount = 0;
 
-    /** Fires just before token expiry to refresh the QR (and detect confirmation). */
-    private final Runnable refreshRunnable = this::pollExportToken;
+    /** Fetches a brand-new token and displays it (initial load / after Refresh / retry-on-error). */
+    private final Runnable fetchRunnable = this::pollExportToken;
 
-    /** Fires every CHECK_INTERVAL_MS while QR is shown, keeping the connection alive
-     *  and calling exportLoginToken to detect confirmation as soon as possible. */
-    private static final long CHECK_INTERVAL_MS = 5000L;
+    /** Fires every POLL_INTERVAL_MS while a QR is on screen, to check for confirmation. */
     private final Runnable confirmCheckRunnable = this::checkConfirmation;
 
     @Override
@@ -92,6 +97,22 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Keep the (pre-login) connection active while this screen is visible — otherwise
+        // ConnectionsManager treats it as backgrounded and throttles/pauses the connection,
+        // delaying our confirmation polling by many seconds. Same call the official
+        // LoginActivity makes for its own not-yet-authenticated account.
+        ConnectionsManager.getInstance(ACCOUNT).setAppPaused(false, false);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        ConnectionsManager.getInstance(ACCOUNT).setAppPaused(true, false);
+    }
+
+    @Override
     public void didReceivedNotification(int id, int account, Object... args) {
         if (id == NotificationCenter.mainUserInfoChanged && !loginCompleted) {
             if (UserConfig.getInstance(ACCOUNT).isClientActivated()) {
@@ -102,19 +123,14 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
     }
 
     /**
-     * Calls exportLoginToken.
-     *
-     * On first call: gets the initial QR token.
-     * On subsequent calls (just before token expiry):
-     *   - if phone already confirmed → loginTokenSuccess → login complete
-     *   - if not yet confirmed → new pending token → update QR, reschedule
-     *
-     * IMPORTANT: every call generates a new token, invalidating the previous QR.
-     * Therefore we only call this again when the current token is about to expire.
+     * Fetches a fresh token via exportLoginToken and shows it as QR right away.
+     * Used for the initial load, for a manual Refresh with no usable pending token, and to
+     * retry after a transient error.
      */
     private void pollExportToken() {
         if (destroyed || loginCompleted) return;
-        handler.removeCallbacks(refreshRunnable);
+        handler.removeCallbacks(fetchRunnable);
+        handler.removeCallbacks(confirmCheckRunnable);
 
         TLRPC.TL_auth_exportLoginToken req = new TLRPC.TL_auth_exportLoginToken();
         req.api_id = BuildVars.APP_ID;
@@ -139,29 +155,25 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
 
                 } else if (response instanceof TLRPC.TL_auth_loginToken) {
                     TLRPC.TL_auth_loginToken t = (TLRPC.TL_auth_loginToken) response;
+                    pendingToken = null;
+                    currentToken = t.token;
                     tokenExpires = t.expires;
-                    if (autoShowQr) {
-                        // Initial load or Refresh button press: show QR immediately
-                        currentToken = t.token;
-                        autoShowQr = false; // next scheduled check → show Refresh button
-                        showQr(currentToken);
-                        scheduleRefresh();
-                    } else {
-                        // Scheduled expiry check: phone didn't confirm.
-                        // Store new token; don't show it until user presses Refresh.
-                        pendingToken = t.token;
-                        qrImageView.setVisibility(View.INVISIBLE);
-                        statusText.setText(R.string.Expired);
-                        refreshButton.setVisibility(View.VISIBLE);
-                        refreshButton.requestFocus();
-                    }
+                    showQr(currentToken);
+                    startConfirmationLoop();
 
                 } else if (response instanceof TLRPC.TL_auth_loginTokenMigrateTo) {
                     onMigrateTo((TLRPC.TL_auth_loginTokenMigrateTo) response);
 
                 } else {
-                    statusText.setText("Connessione in corso… (riprovare tra 5s)");
-                    handler.postDelayed(refreshRunnable, 5000L);
+                    int floodWaitSec = parseFloodWaitSeconds(error);
+                    if (floodWaitSec > 0) {
+                        Log.w(TAG, "exportLoginToken → FLOOD_WAIT_" + floodWaitSec + ", backing off");
+                        statusText.setText("Troppi tentativi, riprovo tra " + floodWaitSec + "s…");
+                        handler.postDelayed(fetchRunnable, (floodWaitSec + 1) * 1000L);
+                    } else {
+                        statusText.setText("Connessione in corso… (riprovare tra 5s)");
+                        handler.postDelayed(fetchRunnable, 5000L);
+                    }
                 }
             }),
             ConnectionsManager.RequestFlagWithoutLogin | ConnectionsManager.RequestFlagFailOnServerErrors
@@ -172,54 +184,41 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
     private void onRefreshPressed() {
         refreshButton.setVisibility(View.GONE);
         long nowSec = System.currentTimeMillis() / 1000L;
-        if (pendingToken != null && tokenExpires > nowSec + 3) {
-            // Pending token still has at least 3 seconds of validity: show it
+        if (pendingToken != null && pendingTokenExpires > nowSec + 3) {
+            // We already have a newer token from a background confirmation check: show it
+            // instead of doing another round trip.
             currentToken = pendingToken;
+            tokenExpires = pendingTokenExpires;
             pendingToken = null;
-            autoShowQr = false;
             showQr(currentToken);
-            scheduleRefresh();
+            startConfirmationLoop();
         } else {
-            // Pending token expired or missing: fetch a fresh token and auto-show it
             pendingToken = null;
-            autoShowQr = true;
             statusText.setText(R.string.Loading);
             pollExportToken();
         }
     }
 
-    /**
-     * Schedule the next exportLoginToken call just before the current token expires.
-     * This is the moment we check for confirmation: if the phone confirmed before
-     * this fires, the next exportLoginToken returns loginTokenSuccess.
-     * We also start a faster check loop every CHECK_INTERVAL_MS seconds.
-     */
-    private void scheduleRefresh() {
-        long nowSec = System.currentTimeMillis() / 1000L;
-        long delayMs = Math.max(3000L, (tokenExpires - nowSec - REFRESH_MARGIN_SEC) * 1000L);
-        Log.d(TAG, "next exportLoginToken in " + (delayMs / 1000) + "s (token expires in " + (tokenExpires - nowSec) + "s)");
-        handler.postDelayed(refreshRunnable, delayMs);
-        // Start fast confirmation checks (every 5s) independently of the QR refresh
+    private void startConfirmationLoop() {
         handler.removeCallbacks(confirmCheckRunnable);
-        handler.postDelayed(confirmCheckRunnable, CHECK_INTERVAL_MS);
+        handler.postDelayed(confirmCheckRunnable, POLL_INTERVAL_MS);
     }
 
     /**
-     * Lightweight check for confirmation: calls exportLoginToken but treats any new
-     * pending token as "not yet confirmed" without changing the displayed QR.
-     * If the phone confirmed, returns loginTokenSuccess and we navigate immediately.
-     * If still pending, the server returns the SAME token or a new one; we compare
-     * to detect whether to update the QR silently.
-     *
-     * Note: this runs BETWEEN the scheduled QR refreshes, so it may generate a new
-     * token. We keep the old QR visible and only update it if we get a new token
-     * and the old one has expired.
+     * Runs every POLL_INTERVAL_MS while a QR is on screen. Calls exportLoginToken purely to read
+     * confirmation status: a still-pending result never changes the displayed QR — only
+     * loginTokenSuccess (→ proceed) or loginTokenMigrateTo (→ DC migration) act on it. If the
+     * server hands back a token different from the one on screen, or the local expiry timestamp
+     * has passed, we stop polling and show the Refresh button instead of auto-refreshing.
      */
     private void checkConfirmation() {
         if (destroyed || loginCompleted || currentToken == null) return;
         long nowSec = System.currentTimeMillis() / 1000L;
-        // Don't run if the scheduled expiry check is imminent (within 3s)
-        if (tokenExpires - nowSec <= REFRESH_MARGIN_SEC + 3) return;
+        if (nowSec >= tokenExpires) {
+            Log.d(TAG, "token expired locally, requiring manual refresh");
+            markExpired();
+            return;
+        }
 
         Log.d(TAG, "confirmation check (token has " + (tokenExpires - nowSec) + "s left)");
 
@@ -235,28 +234,59 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
                     Log.d(TAG, "confirmation check → loginTokenSuccess!");
                     statusText.setText("Login rilevato! Completamento…");
                     onAuthSuccess((TLRPC.TL_auth_loginTokenSuccess) response);
+
                 } else if (response instanceof TLRPC.TL_auth_loginTokenMigrateTo) {
                     Log.d(TAG, "confirmation check → loginTokenMigrateTo");
                     onMigrateTo((TLRPC.TL_auth_loginTokenMigrateTo) response);
+
                 } else if (response instanceof TLRPC.TL_auth_loginToken) {
                     TLRPC.TL_auth_loginToken t = (TLRPC.TL_auth_loginToken) response;
-                    Log.d(TAG, "confirmation check → still pending (expires in " + (t.expires - nowSec) + "s)");
-                    // Update token/expiry but keep the current QR visible
-                    currentToken = t.token;
-                    tokenExpires = t.expires;
-                    // Reschedule the QR refresh with the new expiry
-                    handler.removeCallbacks(refreshRunnable);
-                    handler.postDelayed(refreshRunnable,
-                        Math.max(3000L, (tokenExpires - System.currentTimeMillis() / 1000L - REFRESH_MARGIN_SEC) * 1000L));
-                    // Schedule next confirmation check
-                    handler.postDelayed(confirmCheckRunnable, CHECK_INTERVAL_MS);
+                    if (Arrays.equals(t.token, currentToken)) {
+                        // Still the same token: nothing to do, keep the QR as-is.
+                        handler.postDelayed(confirmCheckRunnable, POLL_INTERVAL_MS);
+                    } else {
+                        // Server gave us a different token than the one on screen. We must not
+                        // silently swap the visible QR, so treat it as expired; stash the new
+                        // token so Refresh can use it without another round trip.
+                        Log.d(TAG, "confirmation check → token changed, requiring manual refresh");
+                        pendingToken = t.token;
+                        pendingTokenExpires = t.expires;
+                        markExpired();
+                    }
+
                 } else {
-                    Log.d(TAG, "confirmation check → error/null, retry");
-                    handler.postDelayed(confirmCheckRunnable, CHECK_INTERVAL_MS);
+                    int floodWaitSec = parseFloodWaitSeconds(error);
+                    if (floodWaitSec > 0) {
+                        Log.w(TAG, "confirmation check → FLOOD_WAIT_" + floodWaitSec + ", backing off");
+                        handler.postDelayed(confirmCheckRunnable, (floodWaitSec + 1) * 1000L);
+                    } else {
+                        Log.d(TAG, "confirmation check → error/null, retry");
+                        handler.postDelayed(confirmCheckRunnable, POLL_INTERVAL_MS);
+                    }
                 }
             }),
             ConnectionsManager.RequestFlagWithoutLogin | ConnectionsManager.RequestFlagFailOnServerErrors
         );
+    }
+
+    /** Stops polling and shows the manual Refresh button; no automatic QR refresh. */
+    private void markExpired() {
+        handler.removeCallbacks(confirmCheckRunnable);
+        qrImageView.setVisibility(View.INVISIBLE);
+        statusText.setText(R.string.Expired);
+        refreshButton.setVisibility(View.VISIBLE);
+        refreshButton.requestFocus();
+    }
+
+    /** Returns the FLOOD_WAIT_X seconds if the error is a flood-wait, -1 otherwise. */
+    private static int parseFloodWaitSeconds(TLRPC.TL_error error) {
+        if (error != null && error.text != null && error.text.startsWith("FLOOD_WAIT_")) {
+            try {
+                return Integer.parseInt(error.text.substring("FLOOD_WAIT_".length()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return -1;
     }
 
     /** Called when exportLoginToken/importLoginToken returns loginTokenSuccess — finalize session. */
@@ -268,7 +298,7 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
         if (!(success.authorization instanceof TLRPC.TL_auth_authorization)) {
             Log.w(TAG, "Unexpected auth type, retrying");
             statusText.setText("Tipo autorizzazione inatteso, riprovare.");
-            handler.postDelayed(refreshRunnable, 3000L);
+            handler.postDelayed(fetchRunnable, 3000L);
             return;
         }
 
@@ -351,8 +381,7 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
                 } else {
                     // No response or error: retry exportLoginToken from scratch
                     Log.w(TAG, "importLoginToken failed, retrying exportLoginToken");
-                    autoShowQr = true;
-                    handler.postDelayed(refreshRunnable, 3000L);
+                    handler.postDelayed(fetchRunnable, 3000L);
                 }
             }),
             ConnectionsManager.RequestFlagWithoutLogin
@@ -376,8 +405,8 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
         try {
             HashMap<EncodeHintType, Object> hints = new HashMap<>();
             hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M);
-            hints.put(EncodeHintType.MARGIN, 2);
-            return new QRCodeWriter().encode(content, 512, 512, hints, null);
+            hints.put(EncodeHintType.MARGIN, 0);
+            return new TelegramQRCodeWriter().encode(content, 512, 512, hints, null);
         } catch (Exception e) {
             Log.e(TAG, "QR render failed", e);
             return null;

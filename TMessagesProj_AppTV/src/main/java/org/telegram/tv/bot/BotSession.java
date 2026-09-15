@@ -7,6 +7,7 @@ import org.telegram.messenger.SendMessagesHelper;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.tl.TL_account;
+import org.telegram.tgnet.tl.TL_keyboard;
 import org.telegram.tv.model.StreamEvent;
 
 import java.util.ArrayList;
@@ -83,8 +84,8 @@ public final class BotSession {
         lastSeenMessageId = Math.max(lastSeenMessageId, msg.messageOwner.id);
         if (msg.messageOwner.reply_markup instanceof TLRPC.TL_replyInlineMarkup) {
             TLRPC.TL_replyInlineMarkup markup = (TLRPC.TL_replyInlineMarkup) msg.messageOwner.reply_markup;
-            for (TLRPC.TL_keyboardButtonRow row : markup.rows) {
-                for (TLRPC.KeyboardButton btn : row.buttons) {
+            for (TL_keyboard.KeyboardInlineButtonRow row : markup.rows) {
+                for (TL_keyboard.KeyboardInlineButton btn : row.buttons) {
                     android.util.Log.d(TAG, "button type=" + btn.getClass().getSimpleName() + " text=" + btn.text);
                 }
             }
