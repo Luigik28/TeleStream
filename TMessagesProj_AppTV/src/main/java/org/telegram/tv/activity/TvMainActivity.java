@@ -627,6 +627,14 @@ public class TvMainActivity extends Activity
 
         long dialogId = -(long) chat.id; // broadcast channels use negative dialog IDs
 
+        // Adaptive bitrate cap: the native engine always requests full quality for RTMP
+        // "unified" streams (hardcoded, ignores any per-endpoint quality preference), so we
+        // clamp the quality value in the outgoing getFile request itself instead (see
+        // LivePlayer.maxVideoQuality). QualityAdaptor watches per-chunk fetch timing and caps
+        // once, never upgrading back, to avoid oscillation.
+        LivePlayer.maxVideoQuality = -1;
+        LivePlayer.chunkListener = new QualityAdaptor();
+
         livePlayer = new LivePlayer(this, account, null, dialogId, 0, true, callRef);
 
         // LivePlayer.configureAudio() sets USAGE_MEDIA (static) for RTMP streams, but the
@@ -692,10 +700,35 @@ public class TvMainActivity extends Activity
     }
 
     private void destroyPlayer() {
+        LivePlayer.maxVideoQuality = -1;
+        LivePlayer.chunkListener = null;
         if (livePlayer != null) { livePlayer.destroy(); livePlayer = null; }
         if (livePlayerView != null && streamPlayerContainer != null) {
             streamPlayerContainer.removeView(livePlayerView);
             livePlayerView = null;
+        }
+    }
+
+    // Adaptive bitrate: starts at quality=2, drops to quality=1 after 3 consecutive late video
+    // chunks, then stops monitoring. Never upgrades back to avoid oscillation.
+    // "Late" means fetch time exceeded the chunk's own playback duration (500 or 1000ms).
+    private static final class QualityAdaptor implements LivePlayer.ChunkListener {
+        private int lateStreak = 0;
+
+        @Override
+        public void onChunkFetched(int videoChannel, int quality, long fetchMs, long budgetMs) {
+            if (videoChannel == 0) return; // audio chunk, skip
+            if (LivePlayer.maxVideoQuality == 1) return; // already capped
+
+            if (fetchMs > budgetMs) {
+                lateStreak++;
+                if (lateStreak >= 3) {
+                    LivePlayer.maxVideoQuality = 1;
+                    android.util.Log.i("TvMain", "ABR: quality capped to 1 after " + lateStreak + " late chunks");
+                }
+            } else {
+                lateStreak = 0;
+            }
         }
     }
 

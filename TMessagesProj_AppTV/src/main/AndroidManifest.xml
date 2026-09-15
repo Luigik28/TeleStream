@@ -9,6 +9,71 @@
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
+    <!-- Drop permissions tied only to the daemons/features removed below (contacts sync,
+         calls/VoIP, background location, boot auto-start, foreground services — none are
+         declared by this app anymore —, launcher shortcuts/badges, billing, biometric
+         passcode unlock) plus a few verified unused in org.telegram.tv.* (clipboard,
+         vibration, overlay windows, media library access — TeamLogoLoader caches in
+         memory only, no disk/gallery access). Kept: INTERNET, network/wifi state, WAKE_LOCK,
+         MODIFY_AUDIO_SETTINGS (needed for video playback). -->
+    <uses-permission android:name="android.permission.READ_CLIPBOARD" tools:node="remove" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" tools:node="remove" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" tools:node="remove" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" tools:node="remove" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" tools:node="remove" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" tools:node="remove" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" tools:node="remove" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove" />
+    <uses-permission android:name="android.permission.GET_ACCOUNTS" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" tools:node="remove" />
+    <uses-permission android:name="android.permission.MANAGE_ACCOUNTS" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_PROFILE" tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" tools:node="remove" />
+    <uses-permission android:name="android.permission.AUTHENTICATE_ACCOUNTS" tools:node="remove" />
+    <uses-permission android:name="android.permission.VIBRATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" tools:node="remove" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" tools:node="remove" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" tools:node="remove" />
+    <uses-permission android:name="android.permission.INSTALL_SHORTCUT" tools:node="remove" />
+    <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT" tools:node="remove" />
+    <uses-permission android:name="com.android.launcher.permission.UNINSTALL_SHORTCUT" tools:node="remove" />
+    <uses-permission android:name="android.permission.CAMERA" tools:node="remove" />
+    <uses-permission android:name="android.permission.BLUETOOTH" tools:node="remove" />
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" tools:node="remove" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" tools:node="remove" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" tools:node="remove" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" tools:node="remove" />
+    <uses-permission android:name="com.sec.android.provider.badge.permission.READ" tools:node="remove" />
+    <uses-permission android:name="com.sec.android.provider.badge.permission.WRITE" tools:node="remove" />
+    <uses-permission android:name="com.htc.launcher.permission.READ_SETTINGS" tools:node="remove" />
+    <uses-permission android:name="com.htc.launcher.permission.UPDATE_SHORTCUT" tools:node="remove" />
+    <uses-permission android:name="com.sonyericsson.home.permission.BROADCAST_BADGE" tools:node="remove" />
+    <uses-permission android:name="com.sonymobile.home.permission.PROVIDER_INSERT_BADGE" tools:node="remove" />
+    <uses-permission android:name="com.anddoes.launcher.permission.UPDATE_COUNT" tools:node="remove" />
+    <uses-permission android:name="com.majeur.launcher.permission.UPDATE_BADGE" tools:node="remove" />
+    <uses-permission android:name="com.huawei.android.launcher.permission.CHANGE_BADGE" tools:node="remove" />
+    <uses-permission android:name="com.huawei.android.launcher.permission.READ_SETTINGS" tools:node="remove" />
+    <uses-permission android:name="com.huawei.android.launcher.permission.WRITE_SETTINGS" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_APP_BADGE" tools:node="remove" />
+    <uses-permission android:name="com.oppo.launcher.permission.READ_SETTINGS" tools:node="remove" />
+    <uses-permission android:name="com.oppo.launcher.permission.WRITE_SETTINGS" tools:node="remove" />
+    <uses-permission android:name="me.everything.badger.permission.BADGE_COUNT_READ" tools:node="remove" />
+    <uses-permission android:name="me.everything.badger.permission.BADGE_COUNT_WRITE" tools:node="remove" />
+    <uses-permission android:name="com.android.vending.BILLING" tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" tools:node="remove" />
+
     <application
         android:name="org.telegram.messenger.ApplicationLoaderImpl"
         android:label="@string/app_name"
@@ -46,6 +111,54 @@
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize"
             android:exported="false"
             android:theme="@style/TvTheme" />
+
+        <!-- Strip background daemons/services inherited from TMessagesProj that this TV app
+             has no UI path to trigger: push keep-alive, boot auto-start, account/contacts
+             sync, notification-action receivers, home-screen widgets (not a thing on Android
+             TV), and whole features absent from the TV UI (calls, background music, live
+             location sharing, story upload/import, video-send re-encoding). Verified none of
+             these classes are referenced from org.telegram.tv.* code. -->
+        <receiver android:name=".AppStartReceiver" tools:node="remove" />
+        <receiver android:name=".RefererReceiver" tools:node="remove" />
+        <receiver android:name=".WearReplyReceiver" tools:node="remove" />
+        <service android:name=".WearAuthListenerService" tools:node="remove" />
+        <receiver android:name=".CallReceiver" tools:node="remove" />
+        <receiver android:name=".SmsReceiver" tools:node="remove" />
+        <service android:name=".KeepAliveJob" tools:node="remove" />
+        <service android:name=".NotificationsService" tools:node="remove" />
+        <service android:name=".NotificationRepeat" tools:node="remove" />
+        <service android:name=".AuthenticatorService" tools:node="remove" />
+        <service android:name=".ContactsSyncAdapterService" tools:node="remove" />
+        <service android:name=".FilesMigrationService" tools:node="remove" />
+        <receiver android:name=".ChatsWidgetProvider" tools:node="remove" />
+        <service android:name=".ChatsWidgetService" tools:node="remove" />
+        <receiver android:name=".ContactsWidgetProvider" tools:node="remove" />
+        <service android:name=".ContactsWidgetService" tools:node="remove" />
+        <receiver android:name=".AutoMessageHeardReceiver" tools:node="remove" />
+        <receiver android:name=".CopyCodeReceiver" tools:node="remove" />
+        <receiver android:name=".NotificationsDisabledReceiver" tools:node="remove" />
+        <receiver android:name=".StopLiveLocationReceiver" tools:node="remove" />
+        <receiver android:name=".PopupReplyReceiver" tools:node="remove" />
+        <receiver android:name=".NotificationCallbackReceiver" tools:node="remove" />
+        <receiver android:name=".ShareBroadcastReceiver" tools:node="remove" />
+        <receiver android:name=".CustomTabsCopyReceiver" tools:node="remove" />
+        <receiver android:name=".NotificationDismissReceiver" tools:node="remove" />
+        <receiver android:name=".ShortcutResultReceiver" tools:node="remove" />
+        <provider android:name=".NotificationImageProvider" tools:node="remove" />
+
+        <service android:name=".BringAppForegroundService" tools:node="remove" />
+        <service android:name=".LocationSharingService" tools:node="remove" />
+        <service android:name=".voip.VoIPService" tools:node="remove" />
+        <service android:name=".MusicPlayerService" tools:node="remove" />
+        <service android:name=".MusicBrowserService" tools:node="remove" />
+        <service android:name=".voip.TelegramConnectionService" tools:node="remove" />
+        <receiver android:name=".MusicPlayerReceiver" tools:node="remove" />
+        <receiver android:name=".voip.VoIPMediaButtonReceiver" tools:node="remove" />
+        <receiver android:name=".voip.VoIPActionsReceiver" tools:node="remove" />
+        <provider android:name=".voip.CallNotificationSoundProvider" tools:node="remove" />
+        <service android:name="org.telegram.ui.Stories.recorder.StoryUploadingService" tools:node="remove" />
+        <service android:name=".ImportingService" tools:node="remove" />
+        <service android:name=".VideoEncodingService" tools:node="remove" />
 
     </application>
 

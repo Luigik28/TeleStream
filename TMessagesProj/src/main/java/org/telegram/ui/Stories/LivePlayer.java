@@ -57,6 +57,12 @@ public class LivePlayer implements NotificationCenter.NotificationCenterDelegate
     public final boolean isRtmpStream;
     public boolean outgoing;
 
+    public static int maxVideoQuality = -1;
+    public interface ChunkListener {
+        void onChunkFetched(int videoChannel, int quality, long fetchMs, long budgetMs);
+    }
+    public static ChunkListener chunkListener;
+
     private boolean isMuted = false;
     public boolean isMuted() {
         return outgoing && isMuted;
@@ -463,7 +469,7 @@ public class LivePlayer implements NotificationCenter.NotificationCenterDelegate
                     if (videoChannel != 0) {
                         inputGroupCallStream.flags |= 1;
                         inputGroupCallStream.video_channel = videoChannel;
-                        inputGroupCallStream.video_quality = quality;
+                        inputGroupCallStream.video_quality = (maxVideoQuality >= 0) ? Math.min(quality, maxVideoQuality) : quality;
                     }
                     req.location = inputGroupCallStream;
                     String key = videoChannel == 0 ? ("" + timestamp) : (videoChannel + "_" + timestamp + "_" + quality);
@@ -474,6 +480,7 @@ public class LivePlayer implements NotificationCenter.NotificationCenterDelegate
                         if (response != null) {
                             TLRPC.TL_upload_file res = (TLRPC.TL_upload_file) response;
                             FileLog.d("[LivePlayer] received in "+(System.currentTimeMillis() - startTime)+"ms getFile{time_ms=" + timestamp + (duration == 500 ? ", scale = 1" : "") + ", video_channel = " + videoChannel + ", video_quality = " + quality+ "}: " + res.bytes.limit() + " bytes");
+                            if (chunkListener != null) chunkListener.onChunkFetched(videoChannel, quality, System.currentTimeMillis() - startTime, duration);
                             instance.onStreamPartAvailable(timestamp, res.bytes.buffer, res.bytes.limit(), responseTime, videoChannel, quality);
                         } else {
                             if ("GROUPCALL_INVALID".equalsIgnoreCase(error.text)) {

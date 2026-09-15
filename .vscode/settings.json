@@ -1,0 +1,23 @@
+{
+  "java.configuration.runtimes": [
+    {
+      "name": "JavaSE-17",
+      "path": "/usr/lib/jvm/java-17-openjdk-amd64",
+      "default": true
+    }
+  ],
+  "java.jdt.ls.vmargs": "-XX:+UseParallelGC -Xmx4G -Xms200m",
+  "java.autobuild.enabled": false,
+  "files.watcherExclude": {
+    "**/build/**": true,
+    "**/.cxx/**": true,
+    "**/.gradle/**": true,
+    "**/jni/third_party/**": true
+  },
+  "search.exclude": {
+    "**/build": true,
+    "**/.cxx": true,
+    "**/jni/third_party": true
+  },
+  "java.configuration.updateBuildConfiguration": "interactive"
+}
