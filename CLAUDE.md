@@ -1,11 +1,19 @@
 # TeleStream
 
-Fork di DrKLO/Telegram con un modulo aggiuntivo per Android TV.
+Fork di DrKLO/Telegram, ridotto al solo modulo Android TV.
 
 ## Moduli
 - `TMessagesProj` — libreria condivisa (Java + nativo via CMake/NDK)
-- `TMessagesProj_AppTV` — app Android TV, il modulo su cui si lavora
-- Altri moduli (App, AppStandalone, AppHuawei, AppHockeyApp, AppTests) ereditati dall'upstream
+- `TMessagesProj_AppTV` — app Android TV, l'unico modulo applicativo del repo
+
+Gli altri moduli ereditati dall'upstream (App, AppStandalone, AppHuawei,
+AppHockeyApp, AppTests) sono stati rimossi: questo repo serve solo per la TV.
+
+## Aggiornamenti da upstream
+Il remote `upstream` punta a https://github.com/DrKLO/Telegram.git.
+Serve principalmente per tirare giù aggiornamenti di `TMessagesProj`
+(fix di sicurezza, nuove funzionalità Telegram). Sync manuale, nessun
+automatismo — va chiesto esplicitamente.
 
 ## Ambiente di sviluppo
 Server remoto Hetzner CPX42 (Ubuntu 24.04, 8 vCPU, 16 GB, 300 GB),
@@ -23,21 +31,6 @@ accesso via VS Code Remote-SSH come utente `luigi`.
 ## Comandi
 ./gradlew :TMessagesProj_AppTV:assembleDebug
 Varianti disponibili: debug, release. Nessun product flavor.
-
-## Stato attuale
-Il build nativo (ffmpeg, boringssl, libvpx, dav1d, opus) compila senza errori.
-Si ferma su `compileDebugJavaWithJavac` del modulo TV.
-
-Errori aperti:
-1. TvLoginActivity:380 — QRCodeWriter.encode() con argomenti nell'ordine
-   sbagliato: manca BarcodeFormat.QR_CODE come secondo parametro
-2. BotSession.java e MessageParser.java — TLRPC.TL_keyboardButtonRow e
-   TLRPC.KeyboardButton non esistono con quel nome qualificato; vanno
-   individuate le classi reali nel codebase
-
-Già risolto: ZXing non era visibile al modulo TV perché dichiarato come
-`implementation` in TMessagesProj. Aggiunto
-`implementation 'com.google.zxing:core:3.5.4'` in TMessagesProj_AppTV.
 
 ## Deploy
 Niente emulatore. Si installa su TV Android fisiche via adb, o scaricando
