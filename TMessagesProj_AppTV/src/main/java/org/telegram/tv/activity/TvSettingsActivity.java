@@ -85,16 +85,58 @@ public class TvSettingsActivity extends Activity {
         root.addView(logoutRow);
 
         setContentView(root);
+
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            backInvokedCallback = BackInvokedRegistration.register(this, this::closeWithTransition);
+        }
     }
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            finish();
-            overridePendingTransition(0, R.anim.tv_slide_out_right);
+            closeWithTransition();
             return true;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    // See TvMainActivity for why both of these are needed: TMessagesProj's manifest enables the
+    // Android 13+ predictive-back dispatcher app-wide, which bypasses onKeyDown(KEYCODE_BACK)
+    // above on some TVs/OS versions. Without a callback here, the system still finishes the
+    // Activity by default (same end result), but skips our custom slide-out transition.
+    @Override
+    public void onBackPressed() {
+        closeWithTransition();
+    }
+
+    private void closeWithTransition() {
+        finish();
+        overridePendingTransition(0, R.anim.tv_slide_out_right);
+    }
+
+    private Object backInvokedCallback; // android.window.OnBackInvokedCallback (API 33+ only)
+
+    @androidx.annotation.RequiresApi(33)
+    private static final class BackInvokedRegistration {
+        static Object register(Activity activity, Runnable action) {
+            android.window.OnBackInvokedCallback callback = action::run;
+            activity.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);
+            return callback;
+        }
+
+        static void unregister(Activity activity, Object callback) {
+            activity.getOnBackInvokedDispatcher()
+                .unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) callback);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (android.os.Build.VERSION.SDK_INT >= 33 && backInvokedCallback != null) {
+            BackInvokedRegistration.unregister(this, backInvokedCallback);
+        }
     }
 
     private LinearLayout makeRow() {

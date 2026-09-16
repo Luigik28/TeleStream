@@ -112,6 +112,57 @@
             android:exported="false"
             android:theme="@style/TvTheme" />
 
+        <!-- Remove the phone-style launcher entry points inherited from TMessagesProj.
+             DefaultIcon is enabled by default with MAIN+LAUNCHER (not LEANBACK_LAUNCHER),
+             pointing at org.telegram.ui.LaunchActivity — the phone UI, not our TV flow. Some
+             system flows (e.g. re-opening the app after "Clear storage" in TV Settings) resolve
+             the launch intent via the generic LAUNCHER category and land there instead of
+             TvLaunchActivity. The other icon aliases are disabled by default but removed too
+             for consistency — none of this makes sense on a TV-only app. -->
+        <activity-alias android:name="org.telegram.messenger.DefaultIcon" tools:node="remove" />
+        <activity-alias android:name="org.telegram.messenger.VintageIcon" tools:node="remove" />
+        <activity-alias android:name="org.telegram.messenger.AquaIcon" tools:node="remove" />
+        <activity-alias android:name="org.telegram.messenger.PremiumIcon" tools:node="remove" />
+        <activity-alias android:name="org.telegram.messenger.TurboIcon" tools:node="remove" />
+        <activity-alias android:name="org.telegram.messenger.NoxIcon" tools:node="remove" />
+
+        <!-- Remaining activities/aliases tied to features already stripped above (VoIP, push
+             notifications, widgets, app shortcuts, sharing) — none reachable from org.telegram.tv.* -->
+        <activity-alias android:name="org.telegram.ui.CallsActivity" tools:node="remove" />
+        <activity android:name="org.telegram.ui.BubbleActivity" tools:node="remove" />
+        <activity android:name="org.telegram.ui.ShareActivity" tools:node="remove" />
+        <activity android:name="org.telegram.ui.ExternalActionActivity" tools:node="remove" />
+        <activity android:name="org.telegram.ui.ChatsWidgetConfigActivity" tools:node="remove" />
+        <activity android:name="org.telegram.ui.ContactsWidgetConfigActivity" tools:node="remove" />
+        <activity android:name="org.telegram.messenger.OpenChatReceiver" tools:node="remove" />
+        <activity android:name="org.telegram.messenger.OpenAttachedMenuBotReceiver" tools:node="remove" />
+        <activity android:name="org.telegram.ui.PopupNotificationActivity" tools:node="remove" />
+        <activity android:name="org.telegram.ui.VoIPPermissionActivity" tools:node="remove" />
+        <activity android:name="org.telegram.ui.VoIPFeedbackActivity" tools:node="remove" />
+
+        <!-- org.telegram.ui.LaunchActivity is the phone chat UI's entry point (t.me/tg: deep
+             links, image/video sharing, sticker pack import). Audited every LaunchActivity.class
+             reference across the shared codebase (29 files): all are in code paths this TV app
+             never reaches (ChatActivity, VoIP UI, widgets, WebviewActivity, notification-sound
+             settings — none of these screens are ever created here) except NotificationsController,
+             which only builds a PendingIntent for a system notification that can never show since
+             POST_NOTIFICATIONS is already removed above. -->
+        <activity android:name="org.telegram.ui.LaunchActivity" tools:node="remove" />
+
+        <!-- App-level metadata for phone-only concerns: Samsung multi-window sizing, Google
+             Wallet, Cast framework (Chromecast receiver — meaningless on a TV app itself),
+             and max_aspect (phone letterboxing hint). -->
+        <uses-library android:name="com.sec.android.app.multiwindow" tools:node="remove" />
+        <meta-data android:name="com.sec.android.support.multiwindow" tools:node="remove" />
+        <meta-data android:name="com.sec.android.multiwindow.DEFAULT_SIZE_W" tools:node="remove" />
+        <meta-data android:name="com.sec.android.multiwindow.DEFAULT_SIZE_H" tools:node="remove" />
+        <meta-data android:name="com.sec.android.multiwindow.MINIMUM_SIZE_W" tools:node="remove" />
+        <meta-data android:name="com.sec.android.multiwindow.MINIMUM_SIZE_H" tools:node="remove" />
+        <meta-data android:name="com.google.android.gms.wallet.api.enabled" tools:node="remove" />
+        <meta-data android:name="com.google.android.gms.vision.DEPENDENCIES" tools:node="remove" />
+        <meta-data android:name="android.max_aspect" tools:node="remove" />
+        <meta-data android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME" tools:node="remove" />
+
         <!-- Strip background daemons/services inherited from TMessagesProj that this TV app
              has no UI path to trigger: push keep-alive, boot auto-start, account/contacts
              sync, notification-action receivers, home-screen widgets (not a thing on Android

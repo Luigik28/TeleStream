@@ -118,12 +118,19 @@ public class TvMainActivity extends Activity
         android.util.Log.d("TvMain", "onCreate account=" + account
             + " isActivated=" + UserConfig.getInstance(account).isClientActivated());
 
+        if (Build.VERSION.SDK_INT >= 33) {
+            backInvokedCallback = BackInvokedRegistration.register(this, this::handleBackInvoked);
+        }
+
         session.start();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (Build.VERSION.SDK_INT >= 33 && backInvokedCallback != null) {
+            BackInvokedRegistration.unregister(this, backInvokedCallback);
+        }
         cancelDotsAnimation();
         cancelWaitingTimeout();
         cancelPolling();
@@ -174,6 +181,51 @@ public class TvMainActivity extends Activity
             return true;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    // TMessagesProj's manifest sets android:enableOnBackInvokedCallback="true" app-wide, which
+    // switches BACK on Android 13+ to the predictive-back dispatcher instead of the classic
+    // onKeyDown(KEYCODE_BACK) path above — onKeyDown is never called for BACK in that mode. With
+    // no callback registered here, the system default just finishes the Activity, so BACK while
+    // streaming exits the whole app instead of closing the player. Reproduced on one TV
+    // (Android 13+, predictive back active) but not another (older/legacy back dispatch) —
+    // matches this exactly. onBackPressed() below covers devices where the framework still
+    // bridges to it; the explicit callback below covers this specific TV where it apparently
+    // doesn't.
+    @Override
+    public void onBackPressed() {
+        if (playerContainer.getVisibility() == View.VISIBLE) {
+            closePlayer();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    private Object backInvokedCallback; // android.window.OnBackInvokedCallback (API 33+ only —
+                                         // kept as Object so this field doesn't need that class
+                                         // resolved on pre-33 devices)
+
+    @androidx.annotation.RequiresApi(33)
+    private static final class BackInvokedRegistration {
+        static Object register(Activity activity, Runnable action) {
+            android.window.OnBackInvokedCallback callback = action::run;
+            activity.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);
+            return callback;
+        }
+
+        static void unregister(Activity activity, Object callback) {
+            activity.getOnBackInvokedDispatcher()
+                .unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) callback);
+        }
+    }
+
+    private void handleBackInvoked() {
+        if (playerContainer.getVisibility() == View.VISIBLE) {
+            closePlayer();
+        } else {
+            finish();
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
