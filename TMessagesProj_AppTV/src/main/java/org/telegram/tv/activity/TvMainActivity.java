@@ -2,7 +2,6 @@ package org.telegram.tv.activity;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.media.AudioAttributes;
 import org.telegram.messenger.LocaleController;
 import android.os.Build;
 import android.os.Bundle;
@@ -73,6 +72,7 @@ public class TvMainActivity extends Activity
     private LinearLayout eventsList;
     private FrameLayout eventsListFrame;
     private View focusCursor;
+    private View lastSelectedRow; // row whose stream is open, so BACK can refocus it
     private TextView sportHeaderView;
 
     // UI — streaming player
@@ -85,6 +85,10 @@ public class TvMainActivity extends Activity
 
     private LivePlayer livePlayer;
     private LivePlayerView livePlayerView;
+    private org.telegram.tv.ui.DelayedVideoSink delayedVideoSink;
+    // Fixed offset applied to video-only, to resync with the audio pipeline's own latency
+    // (confirmed constant, not drifting, and reproduced on two different TV units).
+    private static final long VIDEO_DELAY_MS = 500;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Lifecycle
@@ -440,7 +444,10 @@ public class TvMainActivity extends Activity
         row.setOnFocusChangeListener((v, hasFocus) -> {
             if (hasFocus) moveFocusCursorTo(v);
         });
-        row.setOnClickListener(v -> openEventStream(event));
+        row.setOnClickListener(v -> {
+            lastSelectedRow = row;
+            openEventStream(event);
+        });
 
         // Left category column (flush with screen edge) — width matches the SPORT header column
         FrameLayout sportSlot = new FrameLayout(this);
@@ -738,17 +745,6 @@ public class TvMainActivity extends Activity
 
         livePlayer = new LivePlayer(this, account, null, dialogId, 0, true, callRef);
 
-        // LivePlayer.configureAudio() sets USAGE_MEDIA (static) for RTMP streams, but the
-        // AudioTrack is created later, async, when the joinGroupCall response arrives.
-        // On TV the HDMI audio path adds latency that Android doesn't report, causing video
-        // to appear ahead. USAGE_VOICE_COMMUNICATION bypasses Android's audio effects chain
-        // (equaliser, bass-boost), reducing the Android-side latency before the AudioTrack
-        // is created. This runs on the main thread so it wins the race against any posted callback.
-        if (Build.VERSION.SDK_INT >= 21) {
-            org.webrtc.voiceengine.WebRtcAudioTrack.setAudioTrackUsageAttribute(
-                    AudioAttributes.USAGE_VOICE_COMMUNICATION);
-        }
-
         // TextureViewRenderer (isSurfaceView=false): SurfaceViewRenderer crashes on TV because
         // LivePlayerView.onFirstFrameRendered() calls .animate().start() from the GL thread.
         livePlayerView = new LivePlayerView(this, account, false);
@@ -756,7 +752,9 @@ public class TvMainActivity extends Activity
             new FrameLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT));
-        livePlayer.setDisplaySink(livePlayerView.getSink());
+        // Delay video presentation by a fixed offset to resync with audio (see DelayedVideoSink).
+        delayedVideoSink = new org.telegram.tv.ui.DelayedVideoSink(livePlayerView.getSink(), VIDEO_DELAY_MS);
+        livePlayer.setDisplaySink(delayedVideoSink);
 
         // Unsubscribe while streaming — continuous group-call participant events from joined
         // channels saturate the main thread and cause video frame drops + A/V jitter.
@@ -794,6 +792,15 @@ public class TvMainActivity extends Activity
         streamLoading.setVisibility(View.GONE);
         streamTopBar.setVisibility(View.VISIBLE);
         eventsContainer.setVisibility(View.VISIBLE);
+
+        // Restore focus to the row whose stream was just closed, if it's still on screen
+        // (the list may have been rebuilt in the meantime, e.g. new events arrived) —
+        // otherwise fall back to the first focusable row like before.
+        if (lastSelectedRow != null && lastSelectedRow.getParent() == eventsList
+                && lastSelectedRow.isFocusable()) {
+            lastSelectedRow.requestFocus();
+            return;
+        }
         for (int i = 0; i < eventsList.getChildCount(); i++) {
             View child = eventsList.getChildAt(i);
             if (child.isFocusable()) { child.requestFocus(); break; }
@@ -804,6 +811,7 @@ public class TvMainActivity extends Activity
         LivePlayer.maxVideoQuality = -1;
         LivePlayer.chunkListener = null;
         if (livePlayer != null) { livePlayer.destroy(); livePlayer = null; }
+        if (delayedVideoSink != null) { delayedVideoSink.release(); delayedVideoSink = null; }
         if (livePlayerView != null && streamPlayerContainer != null) {
             streamPlayerContainer.removeView(livePlayerView);
             livePlayerView = null;
@@ -819,17 +827,25 @@ public class TvMainActivity extends Activity
         @Override
         public void onChunkFetched(int videoChannel, int quality, long fetchMs, long budgetMs) {
             if (videoChannel == 0) return; // audio chunk, skip
-            if (LivePlayer.maxVideoQuality == 1) return; // already capped
 
-            if (fetchMs > budgetMs) {
-                lateStreak++;
-                if (lateStreak >= 3) {
-                    LivePlayer.maxVideoQuality = 1;
-                    android.util.Log.i("TvMain", "ABR: quality capped to 1 after " + lateStreak + " late chunks");
+            // LivePlayer calls this directly on whatever native network thread the request
+            // happened to complete on — with several chunks in flight at once, that's not
+            // always the same thread. Hop to the UI thread so lateStreak (a plain, unsynchronized
+            // int) can't lose increments to a race between two concurrent callbacks, which was
+            // silently preventing the streak from ever reaching 3.
+            AndroidUtilities.runOnUIThread(() -> {
+                if (LivePlayer.maxVideoQuality == 1) return; // already capped
+
+                if (fetchMs > budgetMs) {
+                    lateStreak++;
+                    if (lateStreak >= 3) {
+                        LivePlayer.maxVideoQuality = 1;
+                        android.util.Log.i("TvMain", "ABR: quality capped to 1 after " + lateStreak + " late chunks");
+                    }
+                } else {
+                    lateStreak = 0;
                 }
-            } else {
-                lateStreak = 0;
-            }
+            });
         }
     }
 

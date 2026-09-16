@@ -900,7 +900,7 @@ public:
                     } else if (const auto videoData = absl::get_if<PendingVideoSegmentData>(typeData)) {
                         part->task = _requestVideoBroadcastPart(_platformContext, segmentTimestamp, _segmentDuration, videoData->channelId, videoData->quality, handleResult);
                     } else if (const auto unifiedData = absl::get_if<PendingUnifiedSegmentData>(typeData)) {
-                        part->task = _requestVideoBroadcastPart(_platformContext, segmentTimestamp, _segmentDuration, 1, VideoChannelDescription::Quality::Full, handleResult);
+                        part->task = _requestVideoBroadcastPart(_platformContext, segmentTimestamp, _segmentDuration, 1, _unifiedVideoQuality, handleResult);
                     }
                 }
             }
@@ -1003,7 +1003,7 @@ public:
         } else if (const auto videoData = absl::get_if<PendingVideoSegmentData>(typeData)) {
             part->task = _requestVideoBroadcastPart(_platformContext, segmentTimestamp, _segmentDuration, videoData->channelId, videoData->quality, handleResult);
         } else if (const auto unifiedData = absl::get_if<PendingUnifiedSegmentData>(typeData)) {
-            part->task = _requestVideoBroadcastPart(_platformContext, segmentTimestamp, _segmentDuration, 1, VideoChannelDescription::Quality::Full, handleResult);
+            part->task = _requestVideoBroadcastPart(_platformContext, segmentTimestamp, _segmentDuration, 1, _unifiedVideoQuality, handleResult);
         }
     }
 
@@ -1013,6 +1013,16 @@ public:
 
     void setActiveVideoChannels(std::vector<StreamingMediaContext::VideoChannel> const &videoChannels) {
         if (_isUnifiedBroadcast) {
+            // Unified (RTMP) broadcasts are a single combined stream, not per-participant
+            // channels, so there's nothing to match against _activeVideoChannels below — just
+            // remember the one requested quality; the next segment request picks it up (see
+            // PendingUnifiedSegmentData's request call sites). Previously this whole method
+            // was a no-op for unified broadcasts, silently ignoring any quality preference set
+            // via setVideoEndpointQuality("unified", quality) and leaving them pinned to
+            // whatever the caller originally requested (always Quality::Full in this client).
+            if (!videoChannels.empty()) {
+                _unifiedVideoQuality = videoChannels[0].quality;
+            }
             return;
         }
         _activeVideoChannels = videoChannels;
@@ -1041,6 +1051,10 @@ public:
 private:
     std::shared_ptr<Threads> _threads;
     bool _isUnifiedBroadcast = false;
+    // Requested quality for unified (RTMP) broadcasts — see setActiveVideoChannels() above and
+    // the PendingUnifiedSegmentData request call sites below, which read this instead of
+    // hardcoding Quality::Full.
+    VideoChannelDescription::Quality _unifiedVideoQuality = VideoChannelDescription::Quality::Full;
     std::function<std::shared_ptr<BroadcastPartTask>(std::function<void(int64_t)>)> _requestCurrentTime;
     std::function<std::shared_ptr<BroadcastPartTask>(std::shared_ptr<PlatformContext>, int64_t, int64_t, std::function<void(BroadcastPart &&)>)> _requestAudioBroadcastPart;
     std::function<std::shared_ptr<BroadcastPartTask>(std::shared_ptr<PlatformContext>, int64_t, int64_t, int32_t, VideoChannelDescription::Quality, std::function<void(BroadcastPart &&)>)> _requestVideoBroadcastPart;
