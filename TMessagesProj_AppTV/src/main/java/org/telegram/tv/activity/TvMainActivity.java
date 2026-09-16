@@ -30,7 +30,10 @@ import org.telegram.tgnet.TLRPC;
 import org.telegram.tv.bot.BotSession;
 import org.telegram.tv.bot.MessageParser;
 import org.telegram.tv.model.StreamEvent;
+import org.telegram.tv.ui.EventStatsLoader;
 import org.telegram.tv.ui.TeamLogoLoader;
+import org.telegram.ui.Components.AvatarDrawable;
+import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Stories.LivePlayer;
 import org.telegram.ui.Stories.recorder.LivePlayerView;
 
@@ -42,12 +45,16 @@ public class TvMainActivity extends Activity
         implements NotificationCenter.NotificationCenterDelegate, BotSession.Listener {
 
     private static final String BOT_USERNAME = "CherryStreaming_cbot";
+    // Shared by the SPORT column's label rendering and its dynamic-width measurement — keep
+    // these in sync or the measured width won't match what's actually drawn.
+    private static final float SPORT_TEXT_SIZE_SP = 13f;
 
     private final int account = UserConfig.selectedAccount;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private BotSession session;
     private TeamLogoLoader logoLoader;
+    private EventStatsLoader statsLoader;
 
     // Waiting-state animation + polling
     private boolean waitingForEvents = false;
@@ -66,6 +73,7 @@ public class TvMainActivity extends Activity
     private LinearLayout eventsList;
     private FrameLayout eventsListFrame;
     private View focusCursor;
+    private TextView sportHeaderView;
 
     // UI — streaming player
     private View playerContainer;
@@ -94,6 +102,7 @@ public class TvMainActivity extends Activity
         eventsContainer       = findViewById(R.id.events_container);
         eventsList            = findViewById(R.id.events_list);
         eventsListFrame       = findViewById(R.id.events_list_frame);
+        sportHeaderView       = findViewById(R.id.header_sport);
         setupSettingsRow();
         playerContainer       = findViewById(R.id.player_container);
         streamLoading         = findViewById(R.id.stream_loading);
@@ -110,6 +119,7 @@ public class TvMainActivity extends Activity
         });
 
         logoLoader = new TeamLogoLoader(getResources().getDisplayMetrics().density);
+        statsLoader = new EventStatsLoader(account);
         session    = new BotSession(account, BOT_USERNAME, this);
 
         NotificationCenter.getInstance(account).addObserver(
@@ -367,6 +377,12 @@ public class TvMainActivity extends Activity
         eventsList.removeAllViews();
         resetFocusCursor();
 
+        // Size the SPORT column to fit the longest category label among the events actually
+        // shown (e.g. "CARABAO CUP"), so labels never wrap — applied to the fixed header too.
+        int sportColumnWidth = computeSportColumnWidth(events);
+        sportHeaderView.getLayoutParams().width = sportColumnWidth;
+        sportHeaderView.requestLayout();
+
         int catIdx = -1;
         String prevCategory = "";
         List<View> animTargets = new ArrayList<>();
@@ -374,12 +390,9 @@ public class TvMainActivity extends Activity
         for (StreamEvent event : events) {
             if (!event.category.equals(prevCategory)) {
                 catIdx++;
-                View header = createCategoryHeader(event.category);
-                eventsList.addView(header);
-                animTargets.add(header);
                 prevCategory = event.category;
             }
-            View row = createEventRow(event, catIdx);
+            View row = createEventRow(event, catIdx, sportColumnWidth);
             eventsList.addView(row);
             animTargets.add(row);
 
@@ -413,36 +426,7 @@ public class TvMainActivity extends Activity
         }
     }
 
-    /** Full-width section header: solid left strip + gradient band fading to transparent. */
-    private View createCategoryHeader(String category) {
-        int base = categoryColor(category);
-        int r = (base >> 16) & 0xFF, g = (base >> 8) & 0xFF, b = base & 0xFF;
-
-        LinearLayout container = new LinearLayout(this);
-        container.setLayoutParams(new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        container.setOrientation(LinearLayout.HORIZONTAL);
-
-        View strip = new View(this);
-        strip.setBackgroundColor(base);
-        container.addView(strip, new LinearLayout.LayoutParams(dp(5), LinearLayout.LayoutParams.MATCH_PARENT));
-
-        TextView tv = new TextView(this);
-        tv.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        tv.setText(category.toUpperCase());
-        tv.setTextColor(base);
-        tv.setTextSize(13f);
-        tv.setTypeface(null, android.graphics.Typeface.BOLD);
-        tv.setPadding(dp(16), dp(16), dp(20), dp(8));
-        tv.setBackground(new android.graphics.drawable.GradientDrawable(
-            android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{Color.argb(70, r, g, b), Color.argb(0, r, g, b)}));
-        container.addView(tv);
-
-        return container;
-    }
-
-    private View createEventRow(StreamEvent event, int categoryIndex) {
+    private View createEventRow(StreamEvent event, int categoryIndex, int sportColumnWidth) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setFocusable(true);
@@ -458,10 +442,11 @@ public class TvMainActivity extends Activity
         });
         row.setOnClickListener(v -> openEventStream(event));
 
-        // Left category-color strip (flush with screen edge)
-        View strip = new View(this);
-        strip.setBackgroundColor(categoryColor(event.category));
-        row.addView(strip, new LinearLayout.LayoutParams(dp(5), LinearLayout.LayoutParams.MATCH_PARENT));
+        // Left category column (flush with screen edge) — width matches the SPORT header column
+        FrameLayout sportSlot = new FrameLayout(this);
+        sportSlot.setBackgroundColor(categoryColor(event.category));
+        sportSlot.addView(makeOutlinedSportLabel(event.category.toUpperCase()));
+        row.addView(sportSlot, new LinearLayout.LayoutParams(sportColumnWidth, LinearLayout.LayoutParams.MATCH_PARENT));
 
         // Inner content (takes all remaining width, carries top/bottom/end padding)
         LinearLayout inner = new LinearLayout(this);
@@ -486,27 +471,72 @@ public class TvMainActivity extends Activity
             inner.addView(nameView);
         }
 
-        // Time badge — pill with subtle blue border
+        // Viewer count — fixed width matching the SPETTATORI header column, centered.
+        // Populated asynchronously once resolved, hidden until then (and stays hidden if the
+        // channel has no active stream right now).
+        TextView watchersView = new TextView(this);
+        watchersView.setLayoutParams(new LinearLayout.LayoutParams(
+            dp(120), LinearLayout.LayoutParams.MATCH_PARENT));
+        watchersView.setTextColor(0xFF8FA6B8);
+        watchersView.setTextSize(16f);
+        watchersView.setGravity(Gravity.CENTER);
+        watchersView.setVisibility(View.GONE);
+        inner.addView(watchersView);
+        statsLoader.load(event.channelUrl, count -> {
+            if (count < 0) return; // no active stream on this channel right now
+            watchersView.setText("👁 " + formatWatchers(count));
+            watchersView.setVisibility(View.VISIBLE);
+        });
+
+        // Start time — plain text (no badge/box: that clipped vertically on rows shorter than
+        // the badge itself, e.g. events with no team logos), same font/size as the EVENTO
+        // column, in a slot matching the INIZIO header column width.
         TextView timeView = new TextView(this);
-        LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        timeLp.setMarginStart(dp(16));
-        timeView.setLayoutParams(timeLp);
-        timeView.setText(event.time);
+        timeView.setLayoutParams(new LinearLayout.LayoutParams(
+            dp(120), LinearLayout.LayoutParams.WRAP_CONTENT));
+        timeView.setText(timeOnly(event.time));
         timeView.setTextColor(0xFF4FC3F7);
-        timeView.setTextSize(18f);
-        timeView.setTypeface(null, android.graphics.Typeface.BOLD);
-        timeView.setGravity(Gravity.CENTER_VERTICAL);
-        timeView.setPadding(dp(12), dp(5), dp(12), dp(5));
-        android.graphics.drawable.GradientDrawable badge = new android.graphics.drawable.GradientDrawable();
-        badge.setColor(0x221A2A40);
-        badge.setCornerRadius(dp(6));
-        badge.setStroke(dp(1), 0x334FC3F7);
-        timeView.setBackground(badge);
+        timeView.setTextSize(20f);
+        timeView.setGravity(Gravity.CENTER);
         inner.addView(timeView);
 
         row.addView(inner);
         return row;
+    }
+
+    /**
+     * Black-stroke-behind + white-fill-in-front text stack, for legibility on any of the
+     * category background colors (some are light enough that plain white text gets lost).
+     */
+    private View makeOutlinedSportLabel(String text) {
+        FrameLayout stack = new FrameLayout(this);
+
+        TextView stroke = newSportLabelTextView(text);
+        stroke.setTextColor(0xFF000000);
+        stroke.setLayerType(View.LAYER_TYPE_SOFTWARE, null); // Paint.Style.STROKE needs this
+        stroke.getPaint().setStyle(android.graphics.Paint.Style.STROKE);
+        stroke.getPaint().setStrokeWidth(dp(2));
+
+        TextView fill = newSportLabelTextView(text);
+        fill.setTextColor(0xFFFFFFFF);
+
+        stack.addView(stroke);
+        stack.addView(fill);
+        return stack;
+    }
+
+    private TextView newSportLabelTextView(String text) {
+        TextView tv = new TextView(this);
+        tv.setLayoutParams(new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        tv.setText(text);
+        tv.setTextSize(SPORT_TEXT_SIZE_SP);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
+        tv.setGravity(Gravity.CENTER);
+        tv.setMaxLines(1);
+        tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        tv.setPadding(dp(4), dp(4), dp(4), dp(4));
+        return tv;
     }
 
     /**
@@ -568,7 +598,26 @@ public class TvMainActivity extends Activity
         return tv;
     }
 
+    /**
+     * Categories come from the bot as "{emoji} NAME" (e.g. "⚽ Carabao Cup") — the emoji is the
+     * reliable signal, since competition names alone don't always say the sport (a name-based
+     * keyword match wouldn't catch "Carabao Cup" as football). Checked first; falls back to the
+     * old keyword match on the text for any category whose leading emoji isn't recognized.
+     */
     private int categoryColor(String category) {
+        if (!category.isEmpty()) {
+            switch (category.codePointAt(0)) {
+                case 0x26BD:   return 0xFF27AE60; // ⚽ calcio
+                case 0x1F3C0:  return 0xFFC05000; // 🏀 basket
+                case 0x1F3BE:  return 0xFF2874A6; // 🎾 tennis
+                case 0x1F3CE:  // 🏎 auto da corsa
+                case 0x1F3C1:  // 🏁 bandiera a scacchi
+                case 0x1F3CD:  return 0xFF8E1A0E; // 🏍 moto
+                case 0x1F3D0:  // 🏐 pallavolo
+                case 0x1F3C9:  return 0xFF6A1E8A; // 🏉 rugby
+            }
+        }
+
         String up = category.toUpperCase();
         if (up.contains("CALCIO") || up.contains("FOOTBALL") || up.contains("SOCCER")
                 || up.contains("UEFA") || up.contains("SERIE") || up.contains("CHAMPIONS")
@@ -795,10 +844,13 @@ public class TvMainActivity extends Activity
         outer.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         outer.setPadding(0, dp(4), dp(16), dp(4));
 
+        outer.addView(makeAccountAvatarView());
+
         outer.addView(makeIconButton(
             "↻",
             getString(R.string.tv_refresh),
-            v -> session.pollForNewMessage()
+            v -> session.pollForNewMessage(() ->
+                android.widget.Toast.makeText(this, "Aggiornamento completato", android.widget.Toast.LENGTH_SHORT).show())
         ));
 
         outer.addView(makeIconButton(
@@ -812,6 +864,23 @@ public class TvMainActivity extends Activity
 
         eventsContainer.addView(outer, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+    }
+
+    /** Small circular avatar of the logged-in account, to the left of the refresh button. */
+    private View makeAccountAvatarView() {
+        BackupImageView avatarView = new BackupImageView(this);
+        int size = dp(36);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+        lp.setMarginStart(dp(4));
+        avatarView.setLayoutParams(lp);
+        avatarView.setRoundRadius(size / 2);
+
+        TLRPC.User self = UserConfig.getInstance(account).getCurrentUser();
+        AvatarDrawable avatarDrawable = new AvatarDrawable();
+        avatarDrawable.setInfo(self);
+        avatarView.setForUserOrChat(self, avatarDrawable);
+
+        return avatarView;
     }
 
     private LinearLayout makeIconButton(String icon, String label, View.OnClickListener onClick) {
@@ -966,5 +1035,41 @@ public class TvMainActivity extends Activity
 
     private int dp(int dp) {
         return (int) (dp * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    /** 1234 → "1.234", 12500 → "12,5K" — compact enough for a TV row at viewing distance. */
+    private static String formatWatchers(int count) {
+        if (count >= 1_000_000) return String.format(java.util.Locale.ITALY, "%.1fM", count / 1_000_000f);
+        if (count >= 10_000) return String.format(java.util.Locale.ITALY, "%.1fK", count / 1_000f);
+        return String.format(java.util.Locale.ITALY, "%,d", count); // "." as thousands separator
+    }
+
+    /** StreamEvent.time is "DD/MM HH:MM" — the INIZIO column only shows the time part. */
+    private static String timeOnly(String time) {
+        int space = time.indexOf(' ');
+        return space >= 0 ? time.substring(space + 1) : time;
+    }
+
+    /**
+     * Widest natural (unwrapped) width among the distinct category labels in {@code events},
+     * at the SPORT column's exact text size/style, so no label ever wraps. Clamped to a
+     * sane range in case a list has only very short or one absurdly long category name.
+     */
+    private int computeSportColumnWidth(List<StreamEvent> events) {
+        android.text.TextPaint paint = new android.text.TextPaint();
+        paint.setTextSize(android.util.TypedValue.applyDimension(
+            android.util.TypedValue.COMPLEX_UNIT_SP, SPORT_TEXT_SIZE_SP, getResources().getDisplayMetrics()));
+        paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+
+        float maxTextWidth = 0f;
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (StreamEvent event : events) {
+            String label = event.category.toUpperCase();
+            if (!seen.add(label)) continue;
+            maxTextWidth = Math.max(maxTextWidth, paint.measureText(label));
+        }
+
+        int width = (int) Math.ceil(maxTextWidth) + dp(4) * 2; // match sportView's own padding
+        return Math.max(dp(56), Math.min(width, dp(160)));
     }
 }

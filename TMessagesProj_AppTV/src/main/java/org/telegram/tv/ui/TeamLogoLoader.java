@@ -34,9 +34,13 @@ public final class TeamLogoLoader {
     private static final String TAG = "TeamLogoLoader";
 
     private final Map<String, Bitmap> cache = new ConcurrentHashMap<>();
-    // tracks keys already requested (in-flight or completed/failed) to avoid duplicate fetches
+    // tracks keys currently in-flight or successfully loaded, to avoid duplicate/redundant
+    // fetches — but NOT keys that failed, so a later load() call (e.g. on the next events-list
+    // rebuild) retries instead of being stuck showing initials forever after one bad request.
     private final Set<String> requested = ConcurrentHashMap.newKeySet();
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    // Bounded so a list with many events doesn't fire dozens of HTTP requests at once and
+    // self-congest (which was itself a source of the timeouts causing failed loads).
+    private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private final float density;
 
     public TeamLogoLoader(float density) {
@@ -60,10 +64,14 @@ public final class TeamLogoLoader {
 
         setInitialsBadge(iv, teamName);  // immediate placeholder
 
-        if (!requested.add(key)) return; // already in-flight or previously attempted
+        if (!requested.add(key)) return; // already in-flight or already loaded
 
         String normalized = normalize(teamName);
-        executor.execute(() -> fetchFromSportsDb(normalized, key, teamName, iv));
+        executor.execute(() -> {
+            if (!fetchFromSportsDb(normalized, key, teamName, iv)) {
+                requested.remove(key); // allow a future load() call to retry
+            }
+        });
     }
 
     public void shutdown() {
@@ -72,7 +80,9 @@ public final class TeamLogoLoader {
 
     // ─── Network fetch ─────────────────────────────────────────────────────────
 
-    private void fetchFromSportsDb(String normalized, String cacheKey, String displayName, ImageView iv) {
+    /** @return true if a badge was fetched and applied (permanent success); false if this
+     *  attempt failed and should be retried on a future {@link #load} call. */
+    private boolean fetchFromSportsDb(String normalized, String cacheKey, String displayName, ImageView iv) {
         try {
             String encoded = URLEncoder.encode(normalized, "UTF-8");
             String apiUrl = "https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=" + encoded;
@@ -82,7 +92,7 @@ public final class TeamLogoLoader {
             int code = conn.getResponseCode();
             if (code != 200) {
                 android.util.Log.w(TAG, "API HTTP " + code + " for [" + normalized + "]");
-                return;
+                return false;
             }
 
             StringBuilder sb = new StringBuilder();
@@ -96,7 +106,9 @@ public final class TeamLogoLoader {
             JSONArray teams = json.optJSONArray("teams");
             if (teams == null || teams.length() == 0) {
                 android.util.Log.w(TAG, "no match in API for [" + normalized + "]");
-                return;
+                // Team genuinely isn't in the database — retrying won't help, but it's cheap
+                // enough (one request per list rebuild) not to bother special-casing it.
+                return false;
             }
 
             JSONObject team = teams.getJSONObject(0);
@@ -111,7 +123,7 @@ public final class TeamLogoLoader {
                     android.util.Log.d(TAG, "no strTeamBadge — trying api-football CDN: " + badgeUrl);
                 } else {
                     android.util.Log.w(TAG, "no badge URL for [" + normalized + "]");
-                    return;
+                    return false;
                 }
             }
 
@@ -120,7 +132,7 @@ public final class TeamLogoLoader {
             int imgCode = imgConn.getResponseCode();
             if (imgCode != 200) {
                 android.util.Log.w(TAG, "badge image HTTP " + imgCode + " for [" + normalized + "]");
-                return;
+                return false;
             }
 
             BitmapFactory.Options opts = new BitmapFactory.Options();
@@ -131,12 +143,15 @@ public final class TeamLogoLoader {
                 cache.put(cacheKey, bmp);
                 AndroidUtilities.runOnUIThread(() -> iv.setImageBitmap(bmp));
                 android.util.Log.d(TAG, "loaded [" + normalized + "]");
+                return true;
             } else {
                 android.util.Log.w(TAG, "bitmap decode returned null for [" + normalized + "]");
+                return false;
             }
         } catch (Exception e) {
             android.util.Log.w(TAG, "exception for [" + normalized + "]: "
                 + e.getClass().getSimpleName() + " — " + e.getMessage());
+            return false;
         }
     }
 

@@ -326,7 +326,17 @@ public final class BotSession {
      * replied.
      */
     public void pollForNewMessage() {
-        if (botPeer == null || dialogId == 0) return;
+        pollForNewMessage(null);
+    }
+
+    /** Same as {@link #pollForNewMessage()}, but {@code onComplete} always runs afterwards
+     *  (on the main thread) once the round trip finishes, regardless of outcome — lets a
+     *  manually-triggered refresh confirm to the user that it actually happened. */
+    public void pollForNewMessage(Runnable onComplete) {
+        if (botPeer == null || dialogId == 0) {
+            if (onComplete != null) onComplete.run();
+            return;
+        }
 
         // Use identical parameters to checkLastMessageAndProceed so the request
         // is treated the same way by both client and server.
@@ -342,21 +352,25 @@ public final class BotSession {
 
         ConnectionsManager.getInstance(account).sendRequest(req, (response, error) ->
             AndroidUtilities.runOnUIThread(() -> {
-                if (!(response instanceof TLRPC.messages_Messages)) return;
-                ArrayList<TLRPC.Message> msgs = ((TLRPC.messages_Messages) response).messages;
-                if (msgs.isEmpty()) return;
-                TLRPC.Message raw = msgs.get(0);
-                android.util.Log.d(TAG, "poll: id=" + raw.id + " out=" + raw.out
-                    + " today=" + isToday(raw.date)
-                    + " entities=" + (raw.entities != null ? raw.entities.size() : "null"));
-                if (raw.out) return;
-                MessageObject msgObj = new MessageObject(account, raw, false, false);
-                if (MessageParser.isEventsMessage(msgObj)) {
-                    List<StreamEvent> events = MessageParser.parseEventsMessage(msgObj);
-                    if (!events.isEmpty()) {
-                        android.util.Log.d(TAG, "poll: found " + events.size() + " events → showing");
-                        listener.onEventsReady(msgObj, events);
+                try {
+                    if (!(response instanceof TLRPC.messages_Messages)) return;
+                    ArrayList<TLRPC.Message> msgs = ((TLRPC.messages_Messages) response).messages;
+                    if (msgs.isEmpty()) return;
+                    TLRPC.Message raw = msgs.get(0);
+                    android.util.Log.d(TAG, "poll: id=" + raw.id + " out=" + raw.out
+                        + " today=" + isToday(raw.date)
+                        + " entities=" + (raw.entities != null ? raw.entities.size() : "null"));
+                    if (raw.out) return;
+                    MessageObject msgObj = new MessageObject(account, raw, false, false);
+                    if (MessageParser.isEventsMessage(msgObj)) {
+                        List<StreamEvent> events = MessageParser.parseEventsMessage(msgObj);
+                        if (!events.isEmpty()) {
+                            android.util.Log.d(TAG, "poll: found " + events.size() + " events → showing");
+                            listener.onEventsReady(msgObj, events);
+                        }
                     }
+                } finally {
+                    if (onComplete != null) onComplete.run();
                 }
             })
         );
