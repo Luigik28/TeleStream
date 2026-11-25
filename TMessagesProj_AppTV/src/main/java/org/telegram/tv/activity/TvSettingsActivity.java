@@ -33,7 +33,7 @@ public class TvSettingsActivity extends Activity {
 
         // Title
         TextView title = new TextView(this);
-        title.setText(LocaleController.getString(R.string.Settings));
+        title.setText(LocaleController.getString(org.telegram.messenger.R.string.Settings));
         title.setTextColor(0xFFFFFFFF);
         title.setTextSize(26f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -55,7 +55,7 @@ public class TvSettingsActivity extends Activity {
         infoRow.setOnFocusChangeListener((v, hasFocus) -> applyRowFocus(v, hasFocus, 0xFF2CA5E0));
         infoRow.setOnClickListener(v -> showAccountInfo());
         TextView infoText = new TextView(this);
-        infoText.setText("ℹ  " + getString(R.string.tv_account_info));
+        infoText.setText("ℹ  " + LocaleController.getString(R.string.tv_account_info));
         infoText.setTextColor(0xFFFFFFFF);
         infoText.setTextSize(20f);
         infoRow.addView(infoText, new LinearLayout.LayoutParams(
@@ -77,7 +77,7 @@ public class TvSettingsActivity extends Activity {
         logoutRow.setOnFocusChangeListener((v, hasFocus) -> applyRowFocus(v, hasFocus, 0xFFE74C3C));
         logoutRow.setOnClickListener(v -> confirmLogout());
         TextView logoutText = new TextView(this);
-        logoutText.setText(LocaleController.getString(R.string.LogOut));
+        logoutText.setText(LocaleController.getString(org.telegram.messenger.R.string.LogOut));
         logoutText.setTextColor(0xFFE74C3C);
         logoutText.setTextSize(20f);
         logoutRow.addView(logoutText, new LinearLayout.LayoutParams(
@@ -154,10 +154,10 @@ public class TvSettingsActivity extends Activity {
 
     private void confirmLogout() {
         new AlertDialog.Builder(this)
-            .setTitle(LocaleController.getString(R.string.LogOutTitle))
-            .setMessage(getString(R.string.tv_logout_confirm))
-            .setPositiveButton(LocaleController.getString(R.string.OK), (d, w) -> doLogout())
-            .setNegativeButton(LocaleController.getString(R.string.Cancel), null)
+            .setTitle(LocaleController.getString(org.telegram.messenger.R.string.LogOutTitle))
+            .setMessage(LocaleController.getString(R.string.tv_logout_confirm))
+            .setPositiveButton(LocaleController.getString(org.telegram.messenger.R.string.OK), (d, w) -> doLogout())
+            .setNegativeButton(LocaleController.getString(org.telegram.messenger.R.string.Cancel), null)
             .show();
     }
 
@@ -192,9 +192,9 @@ public class TvSettingsActivity extends Activity {
         if (!username.isEmpty()) info.append("\n").append(username);
         if (!phone.isEmpty()) info.append("\n").append(phone);
         new AlertDialog.Builder(this)
-            .setTitle(getString(R.string.tv_account_info))
+            .setTitle(LocaleController.getString(R.string.tv_account_info))
             .setMessage(info.toString())
-            .setPositiveButton(LocaleController.getString(R.string.OK), null)
+            .setPositiveButton(LocaleController.getString(org.telegram.messenger.R.string.OK), null)
             .show();
     }
 

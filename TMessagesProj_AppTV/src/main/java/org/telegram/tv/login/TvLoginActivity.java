@@ -19,6 +19,7 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.ContactsController;
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
@@ -89,10 +90,15 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
         refreshButton = findViewById(R.id.refresh_button);
         refreshButton.setOnClickListener(v -> onRefreshPressed());
 
+        // Strings come from LocaleController, not from Android resources (see the layout).
+        this.<TextView>findViewById(R.id.tv_title).setText(LocaleController.getString(org.telegram.messenger.R.string.AuthAnotherClient));
+        this.<TextView>findViewById(R.id.login_steps).setText(LocaleController.getString(R.string.tv_login_steps));
+        refreshButton.setText(LocaleController.getString(org.telegram.messenger.R.string.Refresh));
+
         // Fallback: if the session is authorized via a server push we may have missed
         NotificationCenter.getInstance(ACCOUNT).addObserver(this, NotificationCenter.mainUserInfoChanged);
 
-        statusText.setText(R.string.Loading);
+        statusText.setText(LocaleController.getString(org.telegram.messenger.R.string.Loading));
         pollExportToken();
     }
 
@@ -194,7 +200,7 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
             startConfirmationLoop();
         } else {
             pendingToken = null;
-            statusText.setText(R.string.Loading);
+            statusText.setText(LocaleController.getString(org.telegram.messenger.R.string.Loading));
             pollExportToken();
         }
     }
@@ -273,7 +279,7 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
     private void markExpired() {
         handler.removeCallbacks(confirmCheckRunnable);
         qrImageView.setVisibility(View.INVISIBLE);
-        statusText.setText(R.string.Expired);
+        statusText.setText(LocaleController.getString(org.telegram.messenger.R.string.Expired));
         refreshButton.setVisibility(View.VISIBLE);
         refreshButton.requestFocus();
     }
@@ -398,7 +404,7 @@ public class TvLoginActivity extends Activity implements NotificationCenter.Noti
             qrImageView.setImageBitmap(bitmap);
             qrImageView.setVisibility(View.VISIBLE);
         }
-        statusText.setText(R.string.AuthAnotherClientInfo3);
+        statusText.setText(LocaleController.getString(org.telegram.messenger.R.string.AuthAnotherClientInfo3));
     }
 
     private Bitmap renderQrBitmap(String content) {

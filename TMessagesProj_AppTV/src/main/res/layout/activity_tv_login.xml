@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- I testi sono impostati da TvLoginActivity con LocaleController: le stringhe
+     non sono più nelle risorse Android (plugin org.telegram.build-app-plugin),
+     quindi qui si usa solo tools:text per l'anteprima. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#1C2733"
@@ -20,7 +24,7 @@
             android:id="@+id/tv_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/AuthAnotherClient"
+            tools:text="@string/AuthAnotherClient"
             android:textColor="#FFFFFF"
             android:textSize="36sp"
             android:textStyle="bold"
@@ -30,15 +34,16 @@
             android:id="@+id/status_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/Loading"
+            tools:text="@string/Loading"
             android:textColor="#99AABB"
             android:textSize="18sp"
             android:lineSpacingMultiplier="1.4" />
 
         <TextView
+            android:id="@+id/login_steps"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/tv_login_steps"
+            tools:text="@string/tv_login_steps"
             android:textColor="#668899"
             android:textSize="14sp"
             android:lineSpacingMultiplier="1.5"
@@ -68,7 +73,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:text="@string/Refresh"
+            tools:text="@string/Refresh"
             android:textSize="16sp"
             android:paddingStart="32dp"
             android:paddingEnd="32dp"

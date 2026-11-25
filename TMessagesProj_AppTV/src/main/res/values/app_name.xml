@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tenuto fuori da strings.xml di proposito: org.telegram.build-app-plugin raccoglie
+     solo i file strings.xml, li impacchetta per LocaleController e in release li
+     scarta dalle risorse Android (tools:discard). app_name serve al manifest. -->
+<resources>
+    <string name="app_name">TeleStream</string>
+</resources>

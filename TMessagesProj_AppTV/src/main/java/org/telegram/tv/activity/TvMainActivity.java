@@ -848,14 +848,14 @@ public class TvMainActivity extends Activity
 
         outer.addView(makeIconButton(
             "↻",
-            getString(R.string.tv_refresh),
+            LocaleController.getString(R.string.tv_refresh),
             v -> session.pollForNewMessage(() ->
                 android.widget.Toast.makeText(this, "Aggiornamento completato", android.widget.Toast.LENGTH_SHORT).show())
         ));
 
         outer.addView(makeIconButton(
             "☰",
-            LocaleController.getString(R.string.Settings),
+            LocaleController.getString(org.telegram.messenger.R.string.Settings),
             v -> {
                 startActivity(new Intent(this, TvSettingsActivity.class));
                 overridePendingTransition(R.anim.tv_slide_in_right, 0);
